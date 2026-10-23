@@ -32,6 +32,14 @@
         <h1 id="entry-character-name"></h1><p id="entry-caption" class="entry-caption">登场！</p>
       </section>
 
+      <section id="decision-screen" class="flow-screen decision-screen" aria-label="成长选择" hidden>
+        <header class="flow-header"><div><p class="eyebrow" id="decision-kicker">ACT 01 · GROWTH</p><h1 id="decision-title">选择成长</h1></div><span id="decision-step" class="progress-chip">本局成长</span></header>
+        <img id="decision-event-image" class="decision-event-image" hidden alt="">
+        <p id="decision-copy" class="flow-copy"></p>
+        <div id="decision-options" class="decision-options"></div>
+        <button id="decision-confirm" class="control-btn primary decision-confirm" type="button" disabled>确认</button>
+      </section>
+
       <section id="battle-screen" class="flow-screen battle-screen" aria-label="自动战斗" hidden>
       <header class="topbar">
         <div class="brand-mark" aria-hidden="true">木</div>
@@ -49,6 +57,11 @@
           <div id="enemy-health-bars" class="health-bars"></div>
         </div>
       </section>
+
+      <aside class="boss-battle-warning" id="boss-warning" aria-live="polite" hidden>
+        <span class="warning-mark" aria-hidden="true">!</span>
+        <b>艺术就是爆炸！要尽快击败迪达拉！</b>
+      </aside>
 
       <section class="arena" aria-label="战斗区域">
         <div class="arena-sky" aria-hidden="true"></div>
@@ -103,7 +116,7 @@
         <p class="flow-copy">前方有两条路，选一条继续探索。</p>
         <div class="route-landscape">
           <div class="route-hill hill-left"></div><div class="route-hill hill-right"></div>
-          <div class="route-player"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span><small id="route-player-hp">HP 1200 / 1200</small></div>
+          <button class="route-player" type="button" data-character-detail="naruto" aria-haspopup="dialog" aria-label="查看鸣人的属性和技能"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span><small id="route-player-hp">HP 1200 / 1200</small></button>
           <div id="route-signs" class="route-signs"></div>
           <div class="route-ground"></div>
         </div>
@@ -124,7 +137,7 @@
         <button id="restart-run-btn" class="control-btn primary intro-start" type="button"><span class="button-icon">↻</span><span>重新开始游戏</span></button>
       </section>
       <aside id="boss-distance" class="boss-distance" aria-label="Boss距离" hidden>
-        <div id="boss-distance-party" class="boss-distance-party"></div><div class="boss-distance-track"><i id="boss-distance-fill"></i></div><span class="boss-distance-icon" aria-label="Boss">☠</span>
+        <div class="boss-distance-track" aria-label="前往 Boss 的路线进度"><i id="boss-distance-fill"></i><img id="boss-distance-player" class="distance-portrait" alt=""></div><img class="boss-distance-icon" src="assets/route-signs/demon.png" alt="Boss 路牌">
       </aside>
     </main>
 <dialog id="character-dialog" class="character-dialog" aria-labelledby="character-dialog-title">
