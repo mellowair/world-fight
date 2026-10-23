@@ -1,0 +1,126 @@
+{
+  "frameWidth": 96,
+  "frameHeight": 112,
+  "columns": 4,
+  "rows": 2,
+  "frames": [
+    {
+      "index": 0,
+      "name": "idle",
+      "x": 0,
+      "y": 0,
+      "width": 96,
+      "height": 112,
+      "file": "frames/idle.svg"
+    },
+    {
+      "index": 1,
+      "name": "surprised",
+      "x": 96,
+      "y": 0,
+      "width": 96,
+      "height": 112,
+      "file": "frames/surprised.svg"
+    },
+    {
+      "index": 2,
+      "name": "hand_head",
+      "x": 192,
+      "y": 0,
+      "width": 96,
+      "height": 112,
+      "file": "frames/hand_head.svg"
+    },
+    {
+      "index": 3,
+      "name": "smile_thumbs_up",
+      "x": 288,
+      "y": 0,
+      "width": 96,
+      "height": 112,
+      "file": "frames/smile_thumbs_up.svg"
+    },
+    {
+      "index": 4,
+      "name": "run_a",
+      "x": 0,
+      "y": 112,
+      "width": 96,
+      "height": 112,
+      "file": "frames/run_a.svg"
+    },
+    {
+      "index": 5,
+      "name": "run_b",
+      "x": 96,
+      "y": 112,
+      "width": 96,
+      "height": 112,
+      "file": "frames/run_b.svg"
+    },
+    {
+      "index": 6,
+      "name": "punch",
+      "x": 192,
+      "y": 112,
+      "width": 96,
+      "height": 112,
+      "file": "frames/punch.svg"
+    },
+    {
+      "index": 7,
+      "name": "hit_x",
+      "x": 288,
+      "y": 112,
+      "width": 96,
+      "height": 112,
+      "file": "frames/hit_x.svg"
+    }
+  ],
+  "suggestedPlayback": {
+    "idle": {
+      "frames": [
+        "idle"
+      ],
+      "fps": 1
+    },
+    "entryPose": {
+      "frames": [
+        "surprised",
+        "hand_head",
+        "smile_thumbs_up"
+      ],
+      "fps": 1.5
+    },
+    "run": {
+      "frames": [
+        "run_a",
+        "run_b"
+      ],
+      "fps": 8
+    },
+    "meleeAttack": {
+      "frames": [
+        "run_a",
+        "run_b",
+        "punch",
+        "punch",
+        "run_b",
+        "run_a"
+      ],
+      "fps": 8
+    },
+    "hit": {
+      "frames": [
+        "hit_x"
+      ],
+      "fps": 4
+    }
+  },
+  "notes": [
+    "Hands and fists are placed away from the face except the deliberate hand-to-head pose.",
+    "Punch arm extends horizontally toward the target with a distinct fist silhouette.",
+    "Run frames have visibly alternating arm and leg positions.",
+    "Frames are clean, self-contained SVGs on a transparent 96x112 canvas."
+  ]
+}

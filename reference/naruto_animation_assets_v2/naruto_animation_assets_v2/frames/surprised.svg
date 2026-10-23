@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="112" viewBox="0 0 96 112" shape-rendering="crispEdges"><g><g stroke="#29253d" stroke-width="4" stroke-linejoin="miter"><path fill="#ee7626" d="M34 86h12v12H31z"/><path fill="#333144" d="M30 96h17v6H27z"/><path fill="#f3c6a0" d="M32 96h12v4H32z"/><path fill="#ee7626" d="M54 86h12v12H54z"/><path fill="#333144" d="M53 96h17v6H51z"/><path fill="#f3c6a0" d="M55 96h12v4H55z"/></g><g stroke="#29253d" stroke-width="4" stroke-linejoin="miter"><path fill="#333144" d="M29 68h40l5 23H24z"/><path fill="#ee7626" d="M32 72h32v17H32z"/><path fill="#fff0cb" stroke="none" d="M45 73h5v15h-5z"/></g><g stroke="#29253d" stroke-width="4" stroke-linejoin="miter"><path fill="#333144" d="M29 70 21 73 14 84 20 89 31 81z"/><path fill="#f3c6a0" d="M14 82 9 85 12 91 20 90 22 85z"/><path fill="#333144" d="M67 70 75 73 82 83 77 89 66 81z"/><path fill="#f3c6a0" d="M80 81 86 84 84 91 76 90 75 85z"/></g>
+<!-- hair -->
+<g stroke="#29253d" stroke-width="4" stroke-linejoin="miter">
+<path fill="#f6a52f" d="M24 17 17 8l14 5 4-11 9 9 7-10 7 11 12-8-1 13 13 1-8 9H24z"/>
+<path fill="#f6a52f" d="M26 19 13 15l6 14-11 3 16 7 2 14h50l2-14 13-9-15-3 5-12-14 7-8-11-8 9-8-9-8 11z"/>
+<path fill="#f4c8a4" d="M22 29h53v34l-9 12H33L22 63z"/>
+<path fill="#343345" d="M20 26h58v15H20z"/><path fill="#9ba6bc" d="M38 27h23v13H38z"/>
+<path fill="none" stroke="#434255" stroke-width="2" d="m44 32 4-3 5 3-4 4-4-1 3-2"/>
+</g>
+<g shape-rendering="crispEdges"><ellipse cx="36" cy="50" rx="5" ry="7" fill="#fff2d7" stroke="#29253d" stroke-width="2"/><ellipse cx="64" cy="50" rx="5" ry="7" fill="#fff2d7" stroke="#29253d" stroke-width="2"/><circle cx="37" cy="51" r="2.5" fill="#315c9f"/><circle cx="63" cy="51" r="2.5" fill="#315c9f"/><path d="M43 65 Q48 60 54 65 Q49 73 43 65Z" fill="#8b343d" stroke="#29253d" stroke-width="2"/></g></g></svg>

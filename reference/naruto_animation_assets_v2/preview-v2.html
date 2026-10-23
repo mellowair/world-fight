@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Naruto v2 animation preview</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; color: #29344d; background: #f3f0e6; font: 14px/1.5 sans-serif; }
+  h1 { margin: 0 0 12px; font-size: 18px; }
+  .stage { display: flex; align-items: center; gap: 24px; margin-bottom: 20px; padding: 16px; background-color: #fffdf5; background-image: linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%); background-size: 16px 16px; background-position: 0 0,0 8px,8px -8px,-8px 0; border: 2px solid #9ba69c; }
+  #actor { width: 288px; height: 336px; object-fit: contain; image-rendering: pixelated; }
+  #phase { min-width: 175px; font-weight: 800; }
+  .frames { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  figure { margin: 0; padding: 8px; text-align: center; background: #fffdf5; border: 1px solid #c6cec2; }
+  figure img { width: 144px; height: 168px; object-fit: contain; image-rendering: pixelated; }
+  figcaption { font-size: 12px; }
+  @media(max-width:700px) { .frames { grid-template-columns: repeat(2,1fr); } #actor { width: 192px; height: 224px; } }
+</style>
+<h1>鸣人第二版素材预览 · 每帧 96×112</h1>
+<div class="stage"><img id="actor" src="naruto_animation_assets_v2/frames/run_a.svg" alt="动画预览"><div id="phase">三轮跑步循环 → 挥拳 → 收回</div></div>
+<div class="frames" id="frames"></div>
+<script>
+  const base = "naruto_animation_assets_v2/frames/";
+  const files = ["idle", "surprised", "hand_head", "smile_thumbs_up", "run_a", "run_b", "punch", "hit_x"];
+  document.querySelector("#frames").innerHTML = files.map((name) => `<figure><img src="${base}${name}.svg" alt="${name}"><figcaption>${name} · 96×112</figcaption></figure>`).join("");
+  const sequence = [
+    ["run_a", "跑步循环 1 / A"], ["run_b", "跑步循环 1 / B"], ["run_a", "跑步循环 2 / A"], ["run_b", "跑步循环 2 / B"],
+    ["run_a", "跑步循环 3 / A"], ["run_b", "跑步循环 3 / B"], ["run_a", "跑步三轮完成"],
+    ["punch", "挥拳伸出"], ["punch", "拳头保持伸出"], ["run_b", "收回"], ["run_a", "回到站姿"],
+  ];
+  let index = 0;
+  const actor = document.querySelector("#actor");
+  const phase = document.querySelector("#phase");
+  const play = () => {
+    const [frame, label] = sequence[index++];
+    actor.src = `${base}${frame}.svg`;
+    phase.textContent = label;
+    if (index < sequence.length) window.setTimeout(play, 125);
+  };
+  window.setTimeout(play, 125);
+</script>
+</html>

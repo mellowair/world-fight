@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#8ed9f1">
+    <title>木叶试炼 · 自动战斗原型</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="game-shell">
+      <section id="intro-screen" class="flow-screen intro-screen intro-city" aria-label="开场演出">
+        <div class="city-sky">
+          <img class="city-panorama" src="assets/city-night-pixel.png" alt="">
+          <div class="warning-beacons" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="sky-redness" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section id="character-select-screen" class="flow-screen character-select-screen" aria-label="初始角色选择" hidden>
+        <p class="eyebrow">ACT 01 · CHOOSE YOUR HERO</p>
+        <h1>神明大人，选择你的大英雄吧！</h1>
+        <div id="starter-candidates" class="starter-candidates"></div>
+        <button id="confirm-character-btn" class="control-btn primary intro-start" type="button" disabled>确认选择</button>
+      </section>
+
+      <section id="entry-screen" class="flow-screen entry-screen" aria-label="角色登场" hidden>
+        <div class="entry-stage"><div class="entry-dust" aria-hidden="true"></div>
+          <div id="entry-actor" class="entry-actor"><img id="entry-character-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="entry-sprite-frame" class="sprite-action" aria-hidden="true"></span></div>
+          <div class="entry-ground"></div>
+        </div>
+        <h1 id="entry-character-name"></h1><p id="entry-caption" class="entry-caption">登场！</p>
+      </section>
+
+      <section id="battle-screen" class="flow-screen battle-screen" aria-label="自动战斗" hidden>
+      <header class="topbar">
+        <div class="brand-mark" aria-hidden="true">木</div>
+        <div class="brand-copy"><p class="eyebrow">PIXEL ROGUELIKE · ACT 01</p><h1>木叶试炼</h1></div>
+        <div class="round-chip"><span class="live-dot"></span><span id="battle-status">准备就绪</span></div>
+      </header>
+
+      <section class="status-board" aria-label="角色生命值">
+        <div class="health-side ally-health">
+          <div class="side-heading"><span class="side-dot ally-dot"></span><span>我方</span></div>
+          <div id="health-bars" class="health-bars"></div>
+        </div>
+        <div class="health-side enemy-health">
+          <div class="side-heading"><span class="side-dot enemy-dot"></span><span>敌方</span></div>
+          <div id="enemy-health-bars" class="health-bars"></div>
+        </div>
+      </section>
+
+      <section class="arena" aria-label="战斗区域">
+        <div class="arena-sky" aria-hidden="true"></div>
+        <div class="arena-label"><span class="sparkle">✦</span> <span id="arena-location">风之国 · 训练场</span></div>
+        <div class="battle-stamp" id="battle-stamp" aria-live="polite"></div>
+
+        <div class="fighter fighter-guard" data-character="guard">
+          <div class="fighter-name">守卫</div>
+          <div class="sprite-wrap"><img src="assets/guard.svg" alt="像素守卫" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
+          <div class="ground-shadow"></div><div class="position-tag">前排</div>
+        </div>
+        <div class="fighter fighter-mage" data-character="mage">
+          <div class="fighter-name">法师</div>
+          <div class="sprite-wrap"><img src="assets/mage.svg" alt="像素法师" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
+          <div class="ground-shadow"></div><div class="position-tag">后排</div>
+        </div>
+        <div id="hero-fighter" class="fighter fighter-naruto" data-character="naruto">
+          <div class="fighter-name">鸣人</div>
+          <div class="sprite-wrap"><img src="assets/naruto-v2/frames/idle.svg" alt="像素忍者鸣人" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span><span class="skill-burst"></span></div>
+          <div class="ground-shadow"></div><div class="position-tag">前排 · 战士</div>
+        </div>
+        <div class="arena-ground"></div>
+      </section>
+
+      <section class="reserve-deck" aria-label="小队成员">
+        <div class="reserve-panel squad-panel">
+          <div class="reserve-heading"><h2>小队成员</h2><span>1 / 4</span></div>
+          <div class="squad-slots">
+            <button class="squad-slot active-slot" type="button" data-character-detail="naruto" aria-haspopup="dialog" aria-label="查看鸣人的属性和技能"><img src="assets/naruto-v2/frames/idle.svg" alt=""><span>鸣人</span><span class="slot-hint">查看</span></button>
+            <div class="squad-slot empty-slot"><b>＋</b><span>预留</span></div>
+            <div class="squad-slot empty-slot"><b>＋</b><span>预留</span></div>
+            <div class="squad-slot empty-slot"><b>＋</b><span>预留</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="battle-tools">
+        <div class="log-panel">
+          <div class="section-heading"><div><span class="heading-icon">▤</span><h2>战斗记录</h2></div><span id="log-count" class="log-count">等待开战</span></div>
+          <ol id="battle-log" class="battle-log" aria-live="polite" aria-relevant="additions"></ol>
+        </div>
+        <div class="controls" aria-label="战斗操作">
+          <button id="speed-btn" class="control-btn"><span class="button-icon">»</span><span>加速 <b id="speed-label">关</b></span></button>
+          <span id="battle-stage-label" class="battle-stage-label">第 1 / 5 场</span>
+        </div>
+        <footer class="footer-note"><span>⚔</span> 自动战斗 · 速度决定先手</footer>
+      </section>
+      </section>
+
+      <section id="route-screen" class="flow-screen route-screen" aria-label="路线选择" hidden>
+        <header class="flow-header"><div><p class="eyebrow">ACT 01 · ROUTE</p><h1>选择前进路线</h1></div><span id="route-progress" class="progress-chip">第 1 步 / 10</span></header>
+        <p class="flow-copy">前方有两条路，选一条继续探索。</p>
+        <div class="route-landscape">
+          <div class="route-hill hill-left"></div><div class="route-hill hill-right"></div>
+          <div class="route-player"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span><small id="route-player-hp">HP 1200 / 1200</small></div>
+          <div id="route-signs" class="route-signs"></div>
+          <div class="route-ground"></div>
+        </div>
+        <div class="route-footer"><span>当前生命</span><b id="route-health">1200 / 1200</b></div>
+      </section>
+
+      <section id="event-screen" class="flow-screen event-screen" aria-label="奇遇" hidden>
+        <header class="flow-header"><div><p class="eyebrow">ROAD EVENT</p><h1>途中奇遇</h1></div><span class="progress-chip">战斗场次不变</span></header>
+        <div class="event-card"><div id="event-icon" class="event-icon" aria-hidden="true">✦</div><h2 id="event-title">奇遇地点</h2><p id="event-description"></p><p id="event-effect" class="event-effect"></p><button id="resolve-event-btn" class="control-btn primary event-button" type="button">触发奇遇</button></div>
+      </section>
+
+      <section id="ending-screen" class="flow-screen ending-screen" aria-label="大关结算" hidden>
+        <div id="ending-mark" class="ending-mark" aria-hidden="true">★</div>
+        <p class="eyebrow">ACT 01 · RESULT</p>
+        <h1 id="ending-title">第一大关结束</h1>
+        <p id="ending-copy" class="flow-copy"></p>
+        <p id="ending-count" class="ending-count"></p>
+        <button id="restart-run-btn" class="control-btn primary intro-start" type="button"><span class="button-icon">↻</span><span>重新开始游戏</span></button>
+      </section>
+      <aside id="boss-distance" class="boss-distance" aria-label="Boss距离" hidden>
+        <div id="boss-distance-party" class="boss-distance-party"></div><div class="boss-distance-track"><i id="boss-distance-fill"></i></div><span class="boss-distance-icon" aria-label="Boss">☠</span>
+      </aside>
+    </main>
+<dialog id="character-dialog" class="character-dialog" aria-labelledby="character-dialog-title">
+      <div class="character-dialog-inner">
+        <header class="character-dialog-header">
+          <div><span class="detail-eyebrow">CHARACTER PROFILE</span><h2 id="character-dialog-title">角色详情</h2></div>
+          <button id="character-dialog-close" class="detail-close" type="button" aria-label="关闭角色详情">×</button>
+        </header>
+        <div id="character-detail" class="character-detail"></div>
+      </div>
+    </dialog>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
