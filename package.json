@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "simulate": "node balanceSimulator.js"
   }
 }

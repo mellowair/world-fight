@@ -1,9 +1,14 @@
 import { ADVENTURE_EVENTS, CAMPAIGN_BATTLES, CHARACTER_DATA, STARTING_CHARACTERS } from "./characters.js";
+import { SKILL_DATA } from "./skills.js";
+import {
+  applyAdventureBattleBonusReward, applyAdventureBattleStatReward, applyBattleBonusReward,
+  advanceTemporaryEffectsAfterBattle, applyBattleStatReward, chooseAdventureEventId, completeAdventureBattle, createAdventureEventResult,
+  createBattleRewardOffer, createRunCharacterState, getCampfireOptions, getSkillAtLevel,
+  getTemporaryCombatModifiers, learnActiveSkill, resolveAdventureEvent, resolveCampfire, startAdventureBattle,
+} from "./progression.js";
 
 const enemyTemplates = new Map(CHARACTER_DATA.filter((character) => character.team === "enemy").map((character) => [character.id, character]));
 const ROUTE_LENGTH = 10;
-
-function pickIndex(length, random) { return Math.min(length - 1, Math.floor(random() * length)); }
 
 function weightedChoice(entries, random) {
   const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
@@ -26,15 +31,8 @@ function makeNode(campaign, index, type) {
 function generateRouteOptions(campaign) {
   const step = campaign.step;
   if (step >= ROUTE_LENGTH) {
-    campaign.status = "combat";
-    const node = makeNode(campaign, 0, "demon");
-    node.status = "in_progress";
-    node.resolution = "boss";
-    node.battle = { ...CAMPAIGN_BATTLES.find((entry) => entry.type === "boss"), number: campaign.completedBattles + 1, step: ROUTE_LENGTH };
-    campaign.activeNode = node;
-    campaign.currentBattle = node.battle;
-    campaign.battleNumber = campaign.completedBattles + 1;
-    campaign.routeOptions = [];
+    campaign.routeOptions = [makeNode(campaign, 0, "demon")];
+    campaign.status = "route";
     return;
   }
 
@@ -72,9 +70,11 @@ function encounterFor(campaign, type) {
 }
 
 function enterBattle(campaign, node, type) {
-  const kind = type === "elite" && battleKindsForStep(campaign.step).includes("elite") ? "elite" : "normal";
+  const kind = type === "boss" ? "boss" : type === "elite" && battleKindsForStep(campaign.step).includes("elite") ? "elite" : "normal";
   node.resolution = kind;
-  node.battle = encounterFor(campaign, kind);
+  node.battle = kind === "boss"
+    ? { ...CAMPAIGN_BATTLES.find((entry) => entry.type === "boss"), number: campaign.completedBattles + 1, step: ROUTE_LENGTH }
+    : encounterFor(campaign, kind);
   node.status = "in_progress";
   campaign.activeNode = node;
   campaign.currentBattle = node.battle;
@@ -91,6 +91,7 @@ function completeActiveNode(campaign) {
   campaign.history.push({ step: campaign.step, type: campaign.activeNode.type, resolution: campaign.activeNode.resolution, status: "completed" });
   campaign.activeNode = null;
   campaign.pendingEvent = null;
+  campaign.activeEventType = null;
   campaign.step += 1;
   generateRouteOptions(campaign);
   return true;
@@ -99,9 +100,11 @@ function completeActiveNode(campaign) {
 export function createCampaign(random = Math.random) {
   return {
     status: "intro", random, step: 0, battleNumber: 0, completedBattles: 0,
-    playerId: null, partyIds: [], playerHp: 0, playerMaxHp: 0, nextAttackMultiplier: 1,
+    playerId: null, partyIds: [], playerHp: 0, playerMaxHp: 0, runCharacterState: null, nextAttackMultiplier: 1,
     consecutiveWithoutBattle: 0, routeOptions: [], history: [], activeNode: null,
     currentBattle: null, pendingEvent: null, resolvedEvents: [], eventResolved: false, combatLaunched: false,
+    startingSkillSelected: false, activeEventType: null, eventBattleSourceId: null,
+    rewardBattleId: null, rewardPhase: null, rewardBattleType: null,
   };
 }
 
@@ -111,20 +114,33 @@ export function startCampaign(campaign) {
   return true;
 }
 
-export function selectStartingCharacter(campaign, characterId) {
+export function selectStartingCharacter(campaign, characterId, activeSkillId) {
   if (!campaign || campaign.status !== "character-select") return false;
   const character = STARTING_CHARACTERS.find((entry) => entry.id === characterId);
   if (!character) return false;
+  let runCharacterState;
+  try { runCharacterState = createRunCharacterState(character, activeSkillId); }
+  catch { return false; }
   campaign.playerId = character.id;
   campaign.partyIds = [character.id];
-  campaign.playerHp = character.hp;
-  campaign.playerMaxHp = character.hp;
+  campaign.runCharacterState = runCharacterState;
+  campaign.startingSkillSelected = activeSkillId !== null;
+  campaign.playerHp = runCharacterState.currentHp;
+  campaign.playerMaxHp = runCharacterState.maxHp;
   campaign.status = "entry";
   return { ...character };
 }
 
+export function chooseStartingSkill(campaign, skillId) {
+  if (!campaign || campaign.status !== "entry" || campaign.startingSkillSelected || !campaign.runCharacterState) return false;
+  const learned = learnActiveSkill(campaign.runCharacterState, skillId, `starting:${campaign.playerId}`);
+  if (!learned) return false;
+  campaign.startingSkillSelected = true;
+  return learned;
+}
+
 export function beginJourney(campaign) {
-  if (!campaign || campaign.status !== "entry" || !campaign.playerId) return false;
+  if (!campaign || campaign.status !== "entry" || !campaign.playerId || !campaign.startingSkillSelected) return false;
   campaign.step = 1;
   generateRouteOptions(campaign);
   return campaign.status;
@@ -141,59 +157,145 @@ export function prepareBattle(campaign) {
   const playerTemplate = STARTING_CHARACTERS.find((character) => character.id === campaign.playerId);
   if (!playerTemplate) return null;
   campaign.combatLaunched = true;
+  const run = campaign.runCharacterState;
+  if (!run || run.characterId !== playerTemplate.id || !run.learnedActiveSkills.length) return null;
+  const skillEffects = run.learnedActiveSkills.map((id) => getSkillAtLevel(run, id)).filter(Boolean);
+  const temporaryModifiers = getTemporaryCombatModifiers(run);
+  const battleId = campaign.eventBattleSourceId ? `event:${campaign.eventBattleSourceId}` : campaign.activeNode?.id ?? `step-${campaign.step}-battle`;
   const ally = {
     ...playerTemplate,
-    maxHp: campaign.playerMaxHp,
-    currentHp: campaign.playerHp,
-    atk: Math.floor(playerTemplate.atk * campaign.nextAttackMultiplier),
+    hp: run.maxHp, maxHp: run.maxHp, currentHp: run.currentHp,
+    atk: Math.floor(run.atk * campaign.nextAttackMultiplier), def: Math.max(0, run.def + temporaryModifiers.def), spd: Math.max(0, run.spd + temporaryModifiers.spd),
+    critChance: run.critRate, critMultiplier: run.critMultiplier,
+    skills: skillEffects, skill: skillEffects[0] ?? null,
   };
   campaign.nextAttackMultiplier = 1;
   const enemies = battle.enemies.map((enemyId) => {
     const template = enemyTemplates.get(enemyId);
     const maxHp = Math.max(1, Math.floor(template.hp * battle.hpScale));
+    const isDeidaraBoss = battle.type === "boss" && battle.enemyNames?.[enemyId] === "迪达拉";
+    const bossSkillConfig = SKILL_DATA["c4-garuda"];
+    const bossSkill = isDeidaraBoss ? { ...bossSkillConfig, ...bossSkillConfig.levels[1], level: 1 } : null;
     return {
       ...template, name: battle.enemyNames?.[enemyId] ?? template.name,
+      ...(isDeidaraBoss ? { role: "爆破艺术家" } : {}),
       hp: maxHp, maxHp, currentHp: maxHp,
       atk: Math.max(1, Math.floor(template.atk * battle.atkScale)),
       def: Math.max(0, Math.floor(template.def * battle.defScale)),
+      ...(isDeidaraBoss ? { skill: bossSkill, skills: [bossSkill], c0DamagePerRound: battle.enemyMechanics?.[enemyId]?.c0DamagePerRound ?? 100 } : {}),
     };
   });
-  return { battle, roster: [ally, ...enemies] };
+  campaign.currentBattle.id = battleId;
+  return {
+    battle: campaign.currentBattle, roster: [ally, ...enemies],
+    combatOptions: { runCharacterState: run, playerId: campaign.playerId, battleId },
+  };
 }
 
 export function finishBattle(campaign, outcome, playerHp) {
   if (!campaign || campaign.status !== "combat" || !campaign.combatLaunched) return false;
   campaign.combatLaunched = false;
+  campaign.playerMaxHp = campaign.runCharacterState?.maxHp ?? campaign.playerMaxHp;
   campaign.playerHp = Math.max(0, Math.min(campaign.playerMaxHp, playerHp));
-  if (outcome !== "victory" || campaign.playerHp <= 0) campaign.settlementNext = "defeat";
-  else {
-    campaign.completedBattles += 1;
-    if (campaign.activeNode) campaign.activeNode.status = "completed";
-    campaign.consecutiveWithoutBattle = 0;
-    campaign.settlementNext = campaign.step === ROUTE_LENGTH ? "victory" : "route";
+  if (campaign.runCharacterState) campaign.runCharacterState.currentHp = campaign.playerHp;
+  if (campaign.runCharacterState) advanceTemporaryEffectsAfterBattle(campaign.runCharacterState);
+  if (outcome !== "victory" || campaign.playerHp <= 0) {
+    if (campaign.eventBattleSourceId) completeAdventureBattle(campaign.runCharacterState, campaign.eventBattleSourceId, "defeat", campaign.random);
+    campaign.settlementNext = "defeat";
+    campaign.status = "settlement";
+    return { status: "settlement", next: "defeat" };
   }
-  campaign.status = "settlement";
-  return { status: "settlement", next: campaign.settlementNext };
+  campaign.completedBattles += 1;
+  campaign.consecutiveWithoutBattle = 0;
+  if (campaign.currentBattle?.type === "boss" || campaign.activeNode?.type === "demon") {
+    campaign.settlementNext = "victory";
+    campaign.status = "settlement";
+    return { status: "settlement", next: "victory" };
+  }
+
+  campaign.rewardBattleType = campaign.eventBattleSourceId
+    ? campaign.runCharacterState.eventResults[campaign.eventBattleSourceId]?.data.battleType
+    : campaign.currentBattle?.type === "elite" || campaign.activeNode?.resolution === "elite" ? "elite" : "normal";
+  if (campaign.eventBattleSourceId) {
+    const result = completeAdventureBattle(campaign.runCharacterState, campaign.eventBattleSourceId, "victory", campaign.random);
+    if (!result || result.status !== "awaiting_reward") return false;
+    campaign.rewardBattleId = campaign.runCharacterState.eventResults[campaign.eventBattleSourceId].data.rewardBattleId;
+  } else {
+    campaign.rewardBattleId = campaign.activeNode?.id ?? campaign.currentBattle?.id;
+    createBattleRewardOffer(campaign.runCharacterState, campaign.rewardBattleId, campaign.rewardBattleType, campaign.random);
+  }
+  campaign.rewardPhase = "stat";
+  campaign.status = "reward";
+  if (campaign.activeNode) campaign.activeNode.rewardStatus = "pending";
+  return { status: "reward", next: "reward", battleType: campaign.rewardBattleType };
 }
 
 export function completeSettlement(campaign) {
   if (!campaign || campaign.status !== "settlement" || !campaign.settlementNext) return null;
   const next = campaign.settlementNext;
   campaign.settlementNext = null;
-  if (next === "route") {
-    campaign.history.push({ step: campaign.step, type: campaign.activeNode?.type ?? "battle", resolution: campaign.activeNode?.resolution ?? "normal", status: "completed" });
+  if (next === "victory" && campaign.activeNode) {
+    campaign.activeNode.status = "completed";
+    campaign.history.push({ step: campaign.step, type: campaign.activeNode.type, resolution: campaign.activeNode.resolution, status: "completed" });
     campaign.activeNode = null;
-    campaign.currentBattle = null;
-    campaign.step += 1;
-    generateRouteOptions(campaign);
-  } else {
-    if (next === "victory" && campaign.activeNode) {
-      campaign.history.push({ step: campaign.step, type: campaign.activeNode.type, resolution: campaign.activeNode.resolution, status: "completed" });
-      campaign.activeNode = null;
-    }
-    campaign.status = next;
   }
+  campaign.status = next;
   return campaign.status;
+}
+
+function finishRewardAndAdvance(campaign) {
+  campaign.playerHp = campaign.runCharacterState.currentHp;
+  if (campaign.activeNode) campaign.activeNode.rewardStatus = "claimed";
+  if (campaign.eventBattleSourceId) {
+    const record = campaign.runCharacterState.eventResults[campaign.eventBattleSourceId];
+    if (record?.status !== "completed") return false;
+    campaign.eventResolved = true;
+  }
+  const completed = completeActiveNode(campaign);
+  if (!completed) return false;
+  campaign.currentBattle = null;
+  campaign.rewardBattleId = null;
+  campaign.rewardPhase = null;
+  campaign.rewardBattleType = null;
+  campaign.eventBattleSourceId = null;
+  return campaign.status;
+}
+
+export function getCampaignRewardOffer(campaign) {
+  if (!campaign?.runCharacterState || campaign.status !== "reward" || !campaign.rewardBattleId) return null;
+  return campaign.runCharacterState.rewardOffers[campaign.rewardBattleId] ?? null;
+}
+
+export function claimCampaignReward(campaign, choiceId, extraChoiceId = null, skillId = null) {
+  if (!campaign || campaign.status !== "reward" || !campaign.runCharacterState || !campaign.rewardBattleId) return false;
+  const offer = getCampaignRewardOffer(campaign);
+  if (!offer) return false;
+  if (campaign.rewardPhase === "stat") {
+    const result = campaign.eventBattleSourceId
+      ? applyAdventureBattleStatReward(campaign.runCharacterState, campaign.eventBattleSourceId, choiceId)
+      : applyBattleStatReward(campaign.runCharacterState, campaign.rewardBattleId, choiceId);
+    if (!result) return false;
+    campaign.playerHp = campaign.runCharacterState.currentHp;
+    campaign.playerMaxHp = campaign.runCharacterState.maxHp;
+    if (offer.battleType === "elite") {
+      campaign.rewardPhase = "bonus";
+      if (campaign.activeNode) campaign.activeNode.rewardStatus = "awaiting_bonus";
+      return { phase: "bonus", result };
+    }
+    if (campaign.activeNode) campaign.activeNode.rewardStatus = "claimed";
+    return { phase: "complete", result, status: finishRewardAndAdvance(campaign) };
+  }
+  if (campaign.rewardPhase === "bonus") {
+    const result = campaign.eventBattleSourceId
+      ? applyAdventureBattleBonusReward(campaign.runCharacterState, campaign.eventBattleSourceId, choiceId, skillId)
+      : applyBattleBonusReward(campaign.runCharacterState, campaign.rewardBattleId, choiceId, skillId);
+    if (!result) return false;
+    campaign.playerHp = campaign.runCharacterState.currentHp;
+    campaign.playerMaxHp = campaign.runCharacterState.maxHp;
+    if (campaign.activeNode) campaign.activeNode.rewardStatus = "claimed";
+    return { phase: "complete", result, status: finishRewardAndAdvance(campaign) };
+  }
+  return false;
 }
 
 export function getRouteOptions(campaign) {
@@ -213,40 +315,66 @@ export function chooseRoute(campaign, nodeId) {
   }
   if (node.type === "demon") return enterBattle(campaign, node, "boss");
 
-  if (node.type === "question") {
-    node.resolution = campaign.random() < 0.3 ? "encounter" : "event";
-    if (node.resolution === "encounter") return enterBattle(campaign, node, "normal");
-  } else node.resolution = "event";
-
-  campaign.pendingEvent = node.type === "campfire"
-    ? ADVENTURE_EVENTS.find((event) => event.effect === "heal")
-    : ADVENTURE_EVENTS[pickIndex(ADVENTURE_EVENTS.length, campaign.random)];
+  if (node.type === "campfire") {
+    node.resolution = "campfire";
+    campaign.activeEventType = "campfire";
+    campaign.pendingEvent = null;
+  } else {
+    const eventId = chooseAdventureEventId(campaign.runCharacterState, campaign.random);
+    campaign.activeEventType = "adventure";
+    campaign.pendingEvent = createAdventureEventResult(campaign.runCharacterState, node.id, eventId, campaign.random);
+    node.resolution = campaign.pendingEvent.eventId;
+  }
   campaign.eventResolved = false;
   campaign.status = "event";
   return { type: "event", event: campaign.pendingEvent, symbol: node.type === "question" ? "?" : "campfire" };
 }
 
 export function resolveRouteEvent(campaign) {
-  if (!campaign || campaign.status !== "event" || !campaign.pendingEvent || campaign.eventResolved) return null;
-  const event = campaign.pendingEvent;
+  if (!campaign || campaign.status !== "event" || campaign.eventResolved) return null;
+  if (campaign.activeEventType === "campfire") return false;
+  const record = campaign.pendingEvent;
+  if (record?.containsBattle) return false;
+  const choices = record?.data?.statChoices ?? record?.data?.skillChoices ?? [];
+  const result = resolveCampaignEvent(campaign, choices[0] ?? null);
+  return result ? { event: record, result: record.result, playerHp: campaign.playerHp } : null;
+}
+
+export function resolveCampaignEvent(campaign, choiceId = null, skillId = null) {
+  if (!campaign || campaign.status !== "event" || campaign.eventResolved || !campaign.activeNode) return false;
   let result;
-  if (event.effect === "heal") {
-    const before = campaign.playerHp;
-    campaign.playerHp = Math.min(campaign.playerMaxHp, campaign.playerHp + event.amount);
-    result = `恢复了 ${campaign.playerHp - before} 点生命，当前生命 ${campaign.playerHp}/${campaign.playerMaxHp}。`;
-  } else if (event.effect === "attack") {
-    campaign.nextAttackMultiplier = event.multiplier;
-    result = `下一场战斗攻击力提高 ${Math.round((event.multiplier - 1) * 100)}%。`;
+  if (campaign.activeEventType === "campfire") {
+    result = resolveCampfire(campaign.runCharacterState, campaign.activeNode.id, choiceId, skillId);
   } else {
-    const before = campaign.playerHp;
-    campaign.playerHp = Math.max(1, campaign.playerHp - event.amount);
-    result = `失去 ${before - campaign.playerHp} 点生命，当前生命 ${campaign.playerHp}/${campaign.playerMaxHp}。`;
+    result = resolveAdventureEvent(campaign.runCharacterState, campaign.activeNode.id, choiceId);
   }
-  campaign.resolvedEvents ??= [];
-  campaign.resolvedEvents.push({ id: event.id, title: event.title, result });
+  if (!result) return false;
+  campaign.playerHp = campaign.runCharacterState.currentHp;
+  campaign.playerMaxHp = campaign.runCharacterState.maxHp;
   campaign.eventResolved = true;
   campaign.activeNode.resolutionResult = result;
-  return { event, result, playerHp: campaign.playerHp };
+  campaign.resolvedEvents.push({ id: campaign.activeNode.id, title: campaign.activeEventType === "campfire" ? "篝火" : campaign.pendingEvent?.name, result });
+  return result;
+}
+
+export function getActiveCampfireOptions(campaign) {
+  if (!campaign || campaign.status !== "event" || campaign.activeEventType !== "campfire") return null;
+  return getCampfireOptions(campaign.runCharacterState);
+}
+
+export function startCampaignEventBattle(campaign) {
+  if (!campaign || campaign.status !== "event" || campaign.eventResolved || campaign.activeEventType !== "adventure" || !campaign.pendingEvent?.containsBattle || !campaign.activeNode) return false;
+  const started = startAdventureBattle(campaign.runCharacterState, campaign.activeNode.id);
+  if (!started) return false;
+  campaign.eventBattleSourceId = campaign.activeNode.id;
+  campaign.activeNode.resolution = started.battleType;
+  campaign.currentBattle = encounterFor(campaign, started.battleType);
+  campaign.currentBattle.id = `event:${campaign.activeNode.id}`;
+  campaign.battleNumber = campaign.completedBattles + 1;
+  campaign.consecutiveWithoutBattle = 0;
+  campaign.status = "combat";
+  campaign.combatLaunched = false;
+  return { type: "battle", battle: campaign.currentBattle };
 }
 
 export function completeLocation(campaign) {
