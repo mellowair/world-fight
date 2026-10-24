@@ -1,0 +1,83 @@
+{
+  "character": "Eren Yeager",
+  "sourceDirectory": "D:/H5自动战斗原型/reference/艾伦",
+  "frameSize": {
+    "width": 96,
+    "height": 112
+  },
+  "background": "transparent RGBA",
+  "actions": {
+    "idle": {
+      "source": "艾伦.png",
+      "frame": "idle.png"
+    },
+    "fall": {
+      "frames": [
+        {
+          "source": "降落2.png",
+          "frame": "fall_2.png",
+          "role": "drop_start",
+          "durationMs": 720
+        },
+        {
+          "source": "降落1.png",
+          "frame": "fall_1.png",
+          "role": "impact",
+          "durationMs": 330
+        }
+      ]
+    },
+    "run": [
+      {
+        "source": "run_1.svg",
+        "frame": "run_a.png"
+      },
+      {
+        "source": "run_2.svg",
+        "frame": "run_b.png"
+      }
+    ],
+    "meleeAttack": {
+      "frames": [
+        {
+          "source": "挥拳起手.png",
+          "frame": "attack_windup.png",
+          "key": "windup",
+          "durationMs": 90
+        },
+        {
+          "source": "punch.png",
+          "frame": "punch.png",
+          "key": "strike",
+          "durationMs": 140
+        },
+        {
+          "source": "挥拳收手.png",
+          "frame": "attack_recover.png",
+          "key": "recover",
+          "durationMs": 90
+        }
+      ],
+      "sequence": [
+        "windup",
+        "strike",
+        "recover"
+      ]
+    },
+    "hit": {
+      "source": "受到攻击.png",
+      "frame": "hit.png"
+    },
+    "dodge": {
+      "source": "闪避.png",
+      "frame": "dodge.png"
+    },
+    "death": {
+      "source": "death.svg",
+      "embeddedImageExtracted": true,
+      "frame": "death.png"
+    }
+  },
+  "processing": "Checkerboard backgrounds on supplied PNGs removed by border-connected neutral-pixel flood fill; all frames are normalized to 96x112 RGBA with nearest-neighbor scaling and a shared foot baseline.",
+  "skills": "No skill animations were supplied; skill slots remain unconfigured."
+}
