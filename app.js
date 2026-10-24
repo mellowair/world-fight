@@ -1,9 +1,13 @@
 import { ANIMATION_TIMING, CHARACTER_DATA, COMBAT_RULES, STARTING_CHARACTERS } from "./characters.js";
-import { beginJourney, chooseRoute, completeLocation, completeSettlement, createCampaign, finishBattle, getRouteOptions, prepareBattle, resolveRouteEvent, selectStartingCharacter, startCampaign } from "./campaign.js";
+import { beginJourney, chooseRoute, chooseStartingSkill, claimCampaignReward, completeLocation, completeSettlement, createCampaign, finishBattle, getActiveCampfireOptions, getCampaignRewardOffer, getRouteOptions, prepareBattle, resolveCampaignEvent, selectStartingCharacter, startCampaign, startCampaignEventBattle } from "./campaign.js";
 import { getCritChance, getDodgeChance, getSkillDodgeChance, initializeBattle, simulateBattle } from "./battle.js";
+import { getSkillAtLevel, getTemporaryCombatModifiers, getTemporaryEffectDisplayRows, getUnlearnedActiveSkills, getUpgradeableSkills } from "./progression.js";
+import { ATTRIBUTE_UPGRADES, ELITE_BONUS_REWARDS, SKILL_DATA } from "./skills.js";
 
 const $ = (selector) => document.querySelector(selector);
 const log = $("#battle-log");
+const logPanel = $(".log-panel");
+const logToggle = $("#battle-log-toggle");
 const statusLabel = $("#battle-status");
 const speedButton = $("#speed-btn");
 const restartRunButton = $("#restart-run-btn");
@@ -18,15 +22,123 @@ let fast = false;
 let displayedEvents = 0;
 let pendingResult = null;
 let eventResultShown = false;
+let playbackPaused = false;
+let battleLogExpanded = false;
+let pausedContinuation = null;
 let selectedCandidateId = null;
+let selectedDecisionId = null;
+let decisionHandler = null;
+let decisionBusy = false;
+let decisionRevision = 0;
 let introTimer = null;
 let entryTimer = null;
+let entryAnimationToken = 0;
 let attackTimer = null;
 let animationStageTimer = null;
-let runCycleTimer = null;
+const spriteFrameTimers = new Map();
+const spriteFrameLayers = new WeakMap();
 let targetHitTimer = null;
 let openingSeenThisPage = false;
+let detailCharacterId = null;
+let selectedStatusId = null;
+let battleStatusState = { jinchuriki: null, c0: null };
 const OPENING_SESSION_KEY = "pixel-battle-opening-seen";
+
+function decisionChoice(id, title, description, disabled = false) {
+  return { id, title, description, disabled };
+}
+
+function renderDecisionScreen(title, description, choices, confirmText, onConfirm, kicker = "ACT 01 · GROWTH", image = null) {
+  decisionRevision += 1;
+  decisionBusy = false;
+  selectedDecisionId = null;
+  decisionHandler = onConfirm;
+  $("#decision-kicker").textContent = kicker;
+  $("#decision-title").textContent = title;
+  $("#decision-copy").textContent = description;
+  const eventImage = $("#decision-event-image");
+  eventImage.hidden = !image;
+  eventImage.src = image ?? "";
+  eventImage.alt = image ? title : "";
+  $("#decision-step").textContent = campaign?.status === "reward" ? `第 ${campaign.step} 步结算` : `第 ${campaign?.step || 0} 步`;
+  const list = $("#decision-options");
+  list.replaceChildren();
+  for (const choice of choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "decision-choice";
+    button.dataset.choiceId = choice.id;
+    button.disabled = Boolean(choice.disabled);
+    button.setAttribute("aria-pressed", "false");
+    const name = document.createElement("b");
+    name.textContent = choice.title;
+    const detail = document.createElement("span");
+    detail.textContent = choice.description ?? "";
+    button.append(name, detail);
+    button.addEventListener("click", () => {
+      if (decisionBusy || button.disabled) return;
+      selectedDecisionId = choice.id;
+      list.querySelectorAll(".decision-choice").forEach((candidate) => {
+        candidate.classList.toggle("selected", candidate === button);
+        candidate.setAttribute("aria-pressed", String(candidate === button));
+      });
+      $("#decision-confirm").disabled = false;
+    });
+    list.append(button);
+  }
+  const confirm = $("#decision-confirm");
+  confirm.textContent = confirmText;
+  confirm.disabled = true;
+  setScreen("decision-screen");
+}
+
+function confirmDecision() {
+  if (decisionBusy || selectedDecisionId === null || typeof decisionHandler !== "function") return;
+  decisionBusy = true;
+  const revision = decisionRevision;
+  const choiceId = selectedDecisionId;
+  const ok = decisionHandler(choiceId);
+  if (ok === false && revision === decisionRevision) {
+    decisionBusy = false;
+    $("#decision-confirm").disabled = false;
+  } else if (revision === decisionRevision) {
+    decisionBusy = false;
+    decisionHandler = null;
+  }
+}
+
+function displaySkillEffect(skill, context = {}) {
+  const chance = Number.isFinite(skill?.chance) ? `触发率 ${Math.round(skill.chance * 100)}%` : "自动生效";
+  if (skill?.effectType === "buff") return `${chance} · 防御 +${skill.defenseBonus ?? 0}，持续 ${skill.durationTurns ?? 1} 回合`;
+  if (skill?.id === "shadow-clone-rush") return `影分身 ${skill.cloneCount ?? skill.level ?? 1} 个 · 伤害倍率 ${skill.multiplier ?? 1}× · ${chance}`;
+  if (skill?.id === "rasengan" || skill?.multiplierFormula) {
+    const formula = skill.multiplierFormula;
+    if (formula) {
+      const spd = Number.isFinite(context.spd) ? context.spd : (Number.isFinite(skill.currentSpeed) ? skill.currentSpeed : null);
+      const multiplier = spd === null ? null : formula.base + spd * formula.coefficient;
+      const coefficient = Number(formula.coefficient).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+      return `伤害倍率：1 + SPD × ${coefficient}${multiplier === null ? "" : ` · 当前 SPD ${spd} → ${multiplier.toFixed(2)}×`} · ${chance}`;
+    }
+  }
+  return `${chance} · 伤害倍率 ${skill?.multiplier ?? 1}×`;
+}
+
+function displayUpgrade(upgradeId) {
+  const upgrade = ATTRIBUTE_UPGRADES.find((item) => item.id === upgradeId);
+  return upgrade ? `${upgrade.name}：${upgrade.description}` : upgradeId;
+}
+
+function describeEventResult(result) {
+  result = result?.result ?? result;
+  if (!result) return "事件已完成。";
+  if (Number.isFinite(result.restored)) return `恢复 ${result.restored} 点生命，当前 ${result.currentHp}/${result.maxHp}。`;
+  if (Number.isFinite(result.hpCost)) return `支付 ${result.hpCost} 点生命，获得${displayUpgrade(result.stat?.id)}；当前生命 ${result.currentHp}。`;
+  if (result.stat) return `获得${displayUpgrade(result.stat.id)}。`;
+  if (result.skill?.name) return `技能「${result.skill.name}」提升至 Lv.${result.skill.level}。`;
+  if (result.name && result.level) return `学会技能「${result.name}」Lv.${result.level}。`;
+  if (result.variant === "heal" || result.heal) return `恢复生命至 ${campaign.playerHp}/${campaign.playerMaxHp}。`;
+  return "事件效果已生效。";
+}
 
 function applyAnimationTiming() {
   const root = document.documentElement;
@@ -44,9 +156,22 @@ function applySpriteFrame(node, character, animationName, frameName) {
   const frame = animation?.frames?.[frameName];
   if (animation?.type === "frames") {
     if (typeof frame !== "string") return false;
-    node.style.backgroundImage = `url("${frame}")`;
-    node.style.backgroundSize = "100% 100%";
-    node.style.backgroundPosition = "center";
+    let layers = spriteFrameLayers.get(node);
+    if (!layers) {
+      layers = new Map();
+      spriteFrameLayers.set(node, layers);
+    }
+    let frameImage = layers.get(frame);
+    if (!frameImage) {
+      frameImage = document.createElement("img");
+      frameImage.className = "sprite-action-frame";
+      frameImage.alt = "";
+      frameImage.draggable = false;
+      frameImage.src = frame;
+      node.append(frameImage);
+      layers.set(frame, frameImage);
+    }
+    for (const layer of layers.values()) layer.classList.toggle("is-current", layer === frameImage);
     node.classList.add("active");
     return true;
   }
@@ -71,8 +196,36 @@ function showFighterFrame(fighter, character, animationName, frameName) {
   return true;
 }
 
+function positionMeleeImpact(burst, attackerEl, targetEl) {
+  const attackerSprite = attackerEl?.querySelector(".sprite-wrap");
+  const targetSprite = targetEl?.querySelector(".sprite-wrap");
+  if (!burst || !attackerSprite || !targetSprite) return false;
+  const attackerRect = attackerSprite.getBoundingClientRect();
+  const targetRect = targetSprite.getBoundingClientRect();
+  const fromRight = attackerRect.left + attackerRect.width / 2 > targetRect.left + targetRect.width / 2;
+  const contactX = fromRight
+    ? targetRect.left + targetRect.width * 0.68
+    : targetRect.left + targetRect.width * 0.32;
+  const contactY = targetRect.top + targetRect.height * 0.62;
+  burst.style.left = `${contactX - targetRect.left}px`;
+  burst.style.top = `${contactY - targetRect.top}px`;
+  return fromRight;
+}
+
+function stopSpriteFrameCycle(actor) {
+  const timerId = spriteFrameTimers.get(actor);
+  if (timerId) window.clearInterval(timerId);
+  spriteFrameTimers.delete(actor);
+}
+
+function clearAllSpriteFrameCycles() {
+  for (const timerId of spriteFrameTimers.values()) window.clearInterval(timerId);
+  spriteFrameTimers.clear();
+}
+
 function clearSpriteFrame(actor) {
   if (!actor) return;
+  stopSpriteFrameCycle(actor);
   actor.classList.remove("has-action-sprite");
   const frame = actor.querySelector(".sprite-action");
   if (!frame) return;
@@ -82,20 +235,43 @@ function clearSpriteFrame(actor) {
   frame.style.removeProperty("background-position");
 }
 
-function stopRunCycle() {
-  window.clearInterval(runCycleTimer);
-  runCycleTimer = null;
+function startFrameCycle(fighter, character, animationName, frameNames, frameDuration, loop = true) {
+  stopSpriteFrameCycle(fighter);
+  const validFrames = frameNames.filter((name) => typeof character?.animations?.[animationName]?.frames?.[name] === "string");
+  if (!validFrames.length) return false;
+  let index = 0;
+  showFighterFrame(fighter, character, animationName, validFrames[index]);
+  if (validFrames.length === 1) return true;
+  const timerId = window.setInterval(() => {
+    if (index >= validFrames.length - 1) {
+      if (!loop) {
+        window.clearInterval(timerId);
+        spriteFrameTimers.delete(fighter);
+        return;
+      }
+      index = 0;
+    } else index += 1;
+    showFighterFrame(fighter, character, animationName, validFrames[index]);
+  }, Math.max(40, frameDuration));
+  spriteFrameTimers.set(fighter, timerId);
+  return true;
+}
+
+function animationFrameNames(character, animationName, prefix = null) {
+  const frames = Object.keys(character?.animations?.[animationName]?.frames ?? {});
+  return prefix ? frames.filter((name) => name.startsWith(prefix)) : frames;
 }
 
 function startRunCycle(fighter, character, frameDuration) {
-  stopRunCycle();
-  let showingA = false;
-  const showNext = () => {
-    showingA = !showingA;
-    showFighterFrame(fighter, character, "run", showingA ? "run_a" : "run_b");
-  };
-  showNext();
-  runCycleTimer = window.setInterval(showNext, Math.max(40, frameDuration));
+  const frames = animationFrameNames(character, "run");
+  if (frames.length) startFrameCycle(fighter, character, "run", frames, frameDuration, true);
+}
+
+function startIdleCycle(fighter, character) {
+  const frames = animationFrameNames(character, "idle");
+  // Keep the authored idle pose stable. Replacing a CSS background every few
+  // hundred milliseconds can look like sprite flicker on mobile browsers.
+  if (frames.length) showFighterFrame(fighter, character, "idle", frames[0]);
 }
 
 function hasOpeningPlayed() {
@@ -135,7 +311,6 @@ function buildHealthRows(characters) {
     fighter.querySelector(".sprite").src = character.asset;
     fighter.querySelector(".sprite").alt = `像素${character.name}`;
     clearSpriteFrame(fighter);
-    fighter.querySelector(".position-tag").textContent = `${character.row === "front" ? "前排" : "后排"}${character.team === "ally" ? " · 战士" : ""}`;
   }
   for (const team of ["ally", "enemy"]) {
     for (const row of ["front", "back"]) {
@@ -161,21 +336,95 @@ function updateHealth(character) {
   fighter?.classList.toggle("is-dead", !character.alive);
 }
 
+function renderAllyStatusIcons() {
+  const allyContainer = $("#ally-status-icons");
+  const allyDetail = $("#ally-status-detail");
+  const enemyContainer = $("#enemy-status-icons");
+  const enemyDetail = $("#enemy-status-detail");
+  if (!allyContainer || !allyDetail || !enemyContainer || !enemyDetail) return;
+
+  const allyStatuses = [];
+  const enemyStatuses = [];
+  const temporaryEffects = campaign?.runCharacterState ? getTemporaryEffectDisplayRows(campaign.runCharacterState) : [];
+  for (const effect of temporaryEffects) {
+    const isCafe = effect.id === "coffee_shop";
+    allyStatuses.push({
+      id: effect.id ?? effect.name,
+      name: isCafe ? "安定屋咖啡店" : "巨石阻路",
+      image: isCafe ? "assets/events/event_coffee_shop.png" : "assets/events/event_big_rock.png",
+      tone: effect.polarity,
+      description: `${effect.statName} ${effect.amountText} · ${effect.durationText}`,
+    });
+  }
+  if (battleStatusState.jinchuriki) {
+    const passive = battleStatusState.jinchuriki;
+    allyStatuses.push({
+      id: "jinchuriki", name: "人柱力", image: "assets/jinchuriki-status.svg", tone: "passive",
+      description: `本场战斗已触发：ATK +25%（${passive.originalAtk} → ${passive.effectiveAtk}）。开战时 HP 低于最大 HP 的 50%。`,
+    });
+  }
+  if (battleStatusState.c0) {
+    const c0 = battleStatusState.c0;
+    enemyStatuses.push({
+      id: "c0-art", name: "C0 终极艺术", image: "assets/c0-art-status.svg", tone: "danger",
+      description: c0.detonated
+        ? `已引爆：造成 ${c0.accumulatedDamage} 点真实伤害（${c0.completedRounds} 个完整行动回合）。`
+        : `迪达拉每完成一个双方行动回合积累 100 点真实伤害；当前 ${c0.accumulatedDamage} 点（${c0.completedRounds} 回合），迪达拉被击败时引爆。`,
+    });
+  }
+
+  const renderButtons = (container, statuses) => {
+    container.replaceChildren(...statuses.map((status) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `ally-status-icon is-${status.tone}${selectedStatusId === status.id ? " is-selected" : ""}`;
+      button.dataset.statusId = status.id;
+      button.setAttribute("aria-label", `${status.name}：${status.description}`);
+      button.setAttribute("aria-expanded", String(selectedStatusId === status.id));
+      const image = document.createElement("img");
+      image.src = status.image;
+      image.alt = "";
+      image.draggable = false;
+      button.append(image);
+      return button;
+    }));
+    container.hidden = statuses.length === 0;
+  };
+  const renderDetail = (detail, selected) => {
+    detail.hidden = !selected;
+    if (!selected) { detail.replaceChildren(); return; }
+    detail.replaceChildren();
+    const title = document.createElement("b");
+    title.textContent = selected.name;
+    const copy = document.createElement("span");
+    copy.textContent = selected.description;
+    detail.append(title, copy);
+  };
+
+  renderButtons(allyContainer, allyStatuses);
+  renderButtons(enemyContainer, enemyStatuses);
+  const selected = [...allyStatuses, ...enemyStatuses].find((status) => status.id === selectedStatusId);
+  if (!selected) selectedStatusId = null;
+  renderDetail(allyDetail, selected && allyStatuses.includes(selected) ? selected : null);
+  renderDetail(enemyDetail, selected && enemyStatuses.includes(selected) ? selected : null);
+}
 function openCharacterDetail(characterId) {
   const character = [...STARTING_CHARACTERS, ...CHARACTER_DATA].find((entry) => entry.id === characterId);
   if (!character) return;
 
+  const run = campaign?.playerId === characterId ? campaign.runCharacterState : null;
+  detailCharacterId = characterId;
+  const stats = run ? { ...run, critChance: run.critRate } : { currentHp: character.currentHp ?? character.hp, maxHp: character.maxHp ?? character.hp, atk: character.atk, def: character.def, spd: character.spd, critChance: character.critChance };
+  const temporaryModifiers = run ? getTemporaryCombatModifiers(run) : { def: 0, spd: 0 };
+  const effectiveStats = { ...stats, def: Math.max(0, stats.def + temporaryModifiers.def), spd: Math.max(0, stats.spd + temporaryModifiers.spd) };
   const rowName = character.row === "front" ? "前排" : "后排";
-  let skillMarkup;
-  if (character.skill) {
-    const chance = Math.round(character.skill.chance * 100);
-    skillMarkup = '<div class="detail-skill-icon">技</div><div class="detail-skill-copy"><b>' +
-      character.skill.name + '</b><p>每次行动有 ' + chance +
-      '% 概率触发，本次攻击造成普通攻击基础伤害的 ' + character.skill.multiplier + ' 倍。</p></div>';
-  } else {
-    skillMarkup = '<div class="detail-skill-icon quiet">—</div><div class="detail-skill-copy"><b>暂无主动技能</b><p>该角色使用普通攻击参与战斗。</p></div>';
-  }
-
+  const learned = run ? run.learnedActiveSkills.map((id) => getSkillAtLevel(run, id)).filter(Boolean) : character.skill ? [character.skill] : [];
+  const skillMarkup = learned.length
+    ? learned.map((skill) => '<div class="detail-skill-row"><div class="detail-skill-icon">技</div><div class="detail-skill-copy"><b>' + skill.name + ' · Lv.' + skill.level + '</b><p>' + (SKILL_DATA[skill.id]?.description ?? displaySkillEffect(skill)) + ' ' + displaySkillEffect({ ...skill, currentSpeed: effectiveStats.spd }) + '</p></div></div>').join("")
+    : '<div class="detail-skill-row"><div class="detail-skill-icon quiet">—</div><div class="detail-skill-copy"><b>尚未选择主动技能</b><p>完成开局技能选择后参与战斗。</p></div></div>';
+  const unlearned = run ? getUnlearnedActiveSkills(run) : [];
+  const lockedMarkup = unlearned.map((id) => '<div class="detail-skill-row locked-skill"><div class="detail-skill-icon quiet">技</div><div class="detail-skill-copy"><b>' + SKILL_DATA[id].name + ' · 未学习</b><p>' + SKILL_DATA[id].description + '</p></div></div>').join("");
+  const passive = SKILL_DATA[run?.passiveSkillId ?? character.passiveSkillId];
   $("#character-detail").innerHTML =
     '<div class="detail-profile"><div class="detail-portrait"><img src="' + character.asset +
     '" alt="' + character.name + '"></div><div class="detail-name"><h3>' + character.name +
@@ -183,29 +432,30 @@ function openCharacterDetail(characterId) {
     character.team + '">' + (character.team === "ally" ? "己方角色" : "敌方角色") +
     '</span></div></div>' +
     '<div class="detail-stats" aria-label="角色属性">' +
-    '<div class="stat-card"><span>生命 HP</span><b>' + character.hp + '</b></div>' +
-    '<div class="stat-card"><span>攻击 ATK</span><b>' + character.atk + '</b></div>' +
-    '<div class="stat-card"><span>防御 DEF</span><b>' + character.def + '</b></div>' +
-    '<div class="stat-card"><span>速度 SPD</span><b>' + character.spd + '</b></div>' +
-    '<div class="stat-card"><span>闪避率</span><b>' + (getDodgeChance(character) * 100).toFixed(1) + '%</b></div>' +
-    '<div class="stat-card"><span>技能闪避率</span><b>' + (getSkillDodgeChance(character) * 100).toFixed(1) + '%</b></div>' +
-    '<div class="stat-card"><span>暴击率</span><b>' + (getCritChance(character) * 100).toFixed(1) + '%</b></div>' +
-    '<div class="stat-card"><span>暴击倍率</span><b>' + COMBAT_RULES.critMultiplier.toFixed(1) + '×</b></div></div>' +
-    '<section class="detail-skill"><h3>技能</h3><div class="detail-skill-row">' +
-    skillMarkup + '</div></section>';
+    '<div class="stat-card"><span>生命 HP</span><b>' + stats.currentHp + ' / ' + stats.maxHp + '</b></div>' +
+    '<div class="stat-card"><span>攻击 ATK</span><b>' + stats.atk + '</b></div>' +
+    '<div class="stat-card"><span>防御 DEF</span><b>' + effectiveStats.def + (temporaryModifiers.def ? '<small>' + stats.def + (temporaryModifiers.def > 0 ? ' + ' : ' − ') + Math.abs(temporaryModifiers.def) + '</small>' : '') + '</b></div>' +
+    '<div class="stat-card"><span>速度 SPD</span><b>' + effectiveStats.spd + (temporaryModifiers.spd ? '<small>' + stats.spd + (temporaryModifiers.spd > 0 ? ' + ' : ' − ') + Math.abs(temporaryModifiers.spd) + '</small>' : '') + '</b></div>' +
+    '<div class="stat-card"><span>闪避率</span><b>' + (getDodgeChance(effectiveStats) * 100).toFixed(1) + '%</b></div>' +
+    '<div class="stat-card"><span>技能闪避率</span><b>' + (getSkillDodgeChance(effectiveStats) * 100).toFixed(1) + '%</b></div>' +
+    '<div class="stat-card"><span>暴击率</span><b>' + (getCritChance(stats) * 100).toFixed(1) + '%</b></div>' +
+    '<div class="stat-card"><span>暴击倍率</span><b>' + (stats.critMultiplier ?? COMBAT_RULES.critMultiplier).toFixed(1) + '×</b></div></div>' +
+    '<section class="detail-skill"><h3>主动技能</h3>' + skillMarkup + lockedMarkup +
+    '<div class="detail-skill-row"><div class="detail-skill-icon quiet">被</div><div class="detail-skill-copy"><b>' + (passive?.name ?? "暂无被动技能") + '</b><p>' + (passive?.description ?? "") + (passive?.id === "jinchuriki" ? " 战斗开始时判定一次，严格低于 50% HP 才触发。" : "") + '</p></div></div></section>';
 
-  if (typeof characterDialog.showModal === "function") characterDialog.showModal();
-  else characterDialog.setAttribute("open", "");
+  if (!characterDialog.open) {
+    if (typeof characterDialog.showModal === "function") characterDialog.showModal();
+    else characterDialog.setAttribute("open", "");
+  }
 }
 function addLog(text, kind = "") {
   const item = document.createElement("li");
   item.className = `log-entry ${kind}`;
   item.innerHTML = text;
   log.append(item);
-  while (log.children.length > 7) log.firstElementChild.remove();
   log.scrollTop = log.scrollHeight;
   displayedEvents += 1;
-  $("#log-count").textContent = `${displayedEvents} 条记录`;
+  $("#log-count").textContent = playbackPaused ? `已暂停 · ${displayedEvents} 条记录` : `${displayedEvents} 条记录`;
 }
 
 function setStatus(text, state = "") {
@@ -230,21 +480,53 @@ function updateBossProgress() {
   if (!visible) return;
   const progress = Math.max(0, Math.min(1, campaign.step / 10));
   $("#boss-distance-fill").style.width = (progress * 100) + "%";
-  const party = $("#boss-distance-party");
-  party.innerHTML = "";
-  for (const partyId of campaign.partyIds ?? [campaign.playerId]) {
-    const character = STARTING_CHARACTERS.find((entry) => entry.id === partyId);
-    if (!character) continue;
-    const portrait = document.createElement("img");
+  const characterId = campaign.runCharacterState?.characterId ?? campaign.playerId;
+  const character = STARTING_CHARACTERS.find((entry) => entry.id === characterId);
+  const portrait = $("#boss-distance-player");
+  if (character && portrait) {
     portrait.src = character.asset;
     portrait.alt = character.name;
-    portrait.className = "distance-portrait";
-    party.append(portrait);
+    portrait.style.left = `clamp(10px, ${progress * 100}%, calc(100% - 10px))`;
   }
 }
 
 function setBattleControls(fighting) {
   speedButton.disabled = !fighting;
+}
+
+function updateBattleLogPanel() {
+  logPanel.classList.toggle("is-expanded", battleLogExpanded);
+  logToggle.setAttribute("aria-expanded", String(battleLogExpanded));
+  logToggle.textContent = playbackPaused ? "继续战斗" : battleLogExpanded ? "收起记录" : "暂停并查看";
+}
+
+function pauseForBattleLog() {
+  if (!playback || playbackPaused) return;
+  playbackPaused = true;
+  battleLogExpanded = true;
+  setBattleControls(false);
+  updateBattleLogPanel();
+  $("#log-count").textContent = `已暂停 · ${displayedEvents} 条记录`;
+}
+
+function toggleBattleLog() {
+  if (playbackPaused) {
+    playbackPaused = false;
+    battleLogExpanded = false;
+    updateBattleLogPanel();
+    setBattleControls(Boolean(playback && campaign?.status === "combat"));
+    $("#log-count").textContent = `${displayedEvents} 条记录`;
+    const continuation = pausedContinuation;
+    pausedContinuation = null;
+    if (continuation) continuation();
+    else if (playback) playNext(generation);
+    return;
+  }
+  if (playback) pauseForBattleLog();
+  else {
+    battleLogExpanded = !battleLogExpanded;
+    updateBattleLogPanel();
+  }
 }
 
 function clearEffects() {
@@ -253,16 +535,18 @@ function clearEffects() {
   window.clearTimeout(attackTimer);
   window.clearTimeout(animationStageTimer);
   window.clearTimeout(targetHitTimer);
-  window.clearInterval(runCycleTimer);
+  clearAllSpriteFrameCycles();
   timer = null;
   effectTimer = null;
   attackTimer = null;
   animationStageTimer = null;
   targetHitTimer = null;
-  runCycleTimer = null;
   document.querySelectorAll(".fighter").forEach((fighter) => {
     fighter.classList.remove("is-attacking", "is-melee-rushing", "is-melee-running", "is-punching", "is-hit", "is-hit-stun", "is-hit-recoil", "is-casting", "is-dodging", "is-critical", "is-impact", "is-magic-attacking", "is-ranged-attacking");
     fighter.querySelector(".impact-burst")?.classList.remove("play");
+    fighter.querySelector(".impact-burst")?.classList.remove("melee-impact", "melee-from-right");
+    fighter.querySelector(".impact-burst")?.style.removeProperty("left");
+    fighter.querySelector(".impact-burst")?.style.removeProperty("top");
     fighter.style.removeProperty("--melee-x");
     fighter.style.removeProperty("--attack-duration");
     fighter.style.removeProperty("--impact-duration");
@@ -282,30 +566,105 @@ function clearEffects() {
   });
   $("#battle-stamp").className = "battle-stamp";
   $("#battle-stamp").textContent = "";
+  battleStatusState = { jinchuriki: null, c0: null };
+  playbackPaused = false;
+  battleLogExpanded = false;
+  pausedContinuation = null;
+  updateBattleLogPanel();
+  selectedStatusId = null;
+  renderAllyStatusIcons();
 }
 
 function playEvent(event, finish) {
+  if (event.type === "c0-charge") {
+    if (battleStatusState.c0) {
+      battleStatusState.c0.completedRounds = event.completedRounds;
+      battleStatusState.c0.accumulatedDamage = event.accumulatedDamage;
+      renderAllyStatusIcons();
+    }
+    addLog(`<b>迪达拉</b> 的 C0 正在蓄积：已完成 ${event.completedRounds} 个完整行动回合，累计 ${event.accumulatedDamage} 点真实伤害。`, "log-enemy");
+    return finish();
+  }
+  if (event.type === "c0-detonate") {
+    if (battleStatusState.c0) {
+      battleStatusState.c0.completedRounds = event.completedRounds;
+      battleStatusState.c0.accumulatedDamage = event.damage;
+      battleStatusState.c0.warning = true;
+      renderAllyStatusIcons();
+    }
+    $("#battle-stamp").textContent = "迪达拉倒下了！C0 终极艺术即将引爆！";
+    $("#battle-stamp").className = "battle-stamp skill-stamp c0-warning show";
+    addLog(`<b>迪达拉倒下了，但遗留的 C0 正在引爆！</b> 即将受到 ${event.damage} 点真实伤害，请留意最终结算。`, "log-enemy");
+    const resolveDetonation = () => {
+      if (battleStatusState.c0) {
+        battleStatusState.c0.warning = false;
+        battleStatusState.c0.detonated = true;
+        renderAllyStatusIcons();
+      }
+      const target = viewState.characters.find((character) => character.id === event.targetId);
+      if (target) {
+        if (event.hpAfter <= 0) document.querySelector(`[data-character="${target.id}"]`)?.style.setProperty("--death-duration", `${ANIMATION_TIMING.boss.defeatFallMs}ms`);
+        target.currentHp = event.hpAfter;
+        target.alive = event.hpAfter > 0;
+        updateHealth(target);
+      }
+      $("#battle-stamp").textContent = "C0 引爆！";
+      $("#battle-stamp").className = "battle-stamp skill-stamp show";
+      addLog(`<b>C0 终极艺术引爆！</b> 造成 ${event.damage} 点真实伤害（${event.completedRounds} 个完整回合），玩家 HP ${event.hpBefore} → ${event.hpAfter}。`, "log-death");
+      finish();
+    };
+    timer = window.setTimeout(() => {
+      timer = null;
+      if (playbackPaused) pausedContinuation = resolveDetonation;
+      else resolveDetonation();
+    }, fast ? ANIMATION_TIMING.boss.c0WarningMs / ANIMATION_TIMING.attack.fastPlaybackMultiplier : ANIMATION_TIMING.boss.c0WarningMs);
+    return;
+  }
   if (event.type === "battle-end") {
     const win = event.outcome === "victory";
     const player = pendingResult.finalCharacters.find((character) => character.team === "ally");
     const transition = finishBattle(campaign, pendingResult.outcome, player.currentHp);
+    updateProgressionDisplays();
     setStatus(win ? "战斗胜利" : "战斗失败", "finished");
     setBattleControls(false);
     $("#battle-stamp").textContent = win ? "胜利！" : "战斗失败";
     $("#battle-stamp").classList.add("show", win ? "stamp-win" : "stamp-lose");
     addLog(win ? `第 ${campaign.battleNumber} 场 · <b>胜利</b>` : `第 ${campaign.battleNumber} 场 · <b>战败，本局结束</b>`, win ? "log-win" : "log-death");
-    const holdMs = fast ? ANIMATION_TIMING.attack.resultHoldMs / ANIMATION_TIMING.attack.fastPlaybackMultiplier : ANIMATION_TIMING.attack.resultHoldMs;
-    timer = window.setTimeout(() => {
-      if (transition?.status !== "settlement") return;
-      const nextState = completeSettlement(campaign);
+    const normalHoldMs = fast ? ANIMATION_TIMING.attack.resultHoldMs / ANIMATION_TIMING.attack.fastPlaybackMultiplier : ANIMATION_TIMING.attack.resultHoldMs;
+    const defeatHoldMs = fast ? ANIMATION_TIMING.boss.defeatHoldMs / ANIMATION_TIMING.attack.fastPlaybackMultiplier : ANIMATION_TIMING.boss.defeatHoldMs;
+    let transitionApplied = false;
+    const applyBattleTransition = () => {
+      if (transitionApplied || !transition || !["settlement", "reward"].includes(transition.status)) return;
+      transitionApplied = true;
       playback = null;
       pendingResult = null;
       setBattleControls(false);
-      if (nextState === "route") renderRoute();
-      else if (nextState === "combat") beginBattle();
-      else renderEnding();
-    }, holdMs);
+      if (transition.status === "reward") renderBattleReward();
+      else {
+        completeSettlement(campaign);
+        renderEnding();
+      }
+    };
+    timer = window.setTimeout(() => {
+      timer = null;
+      if (playbackPaused) pausedContinuation = applyBattleTransition;
+      else applyBattleTransition();
+    }, win ? normalHoldMs : defeatHoldMs);
     return;
+  }
+  if (event.type === "skill") {
+    const actor = viewState.characters.find((character) => character.id === event.attackerId);
+    addLog(`<b>${actor?.name ?? "角色"}</b> 触发 <span class="skill-name">${event.skillName}</span>，防御提高 ${event.defenseBonus}。`, "log-skill");
+    return finish();
+  }
+  if (event.type === "passive-trigger") {
+    const actor = viewState.characters.find((character) => character.id === event.attackerId);
+    if (event.skillId === "jinchuriki") {
+      battleStatusState.jinchuriki = { originalAtk: event.originalAtk, effectiveAtk: event.effectiveAtk };
+      renderAllyStatusIcons();
+    }
+    addLog(`<b>${actor?.name ?? "角色"}</b> 被动 <span class="skill-name">${event.skillName}</span> 生效：ATK ${event.originalAtk} → ${event.effectiveAtk}（+25%）。`, "log-skill");
+    return finish();
   }
   if (event.type !== "attack") return finish();
   const attacker = viewState.characters.find((c) => c.id === event.attackerId);
@@ -315,7 +674,8 @@ function playEvent(event, finish) {
   const targetEl = document.querySelector(`[data-character="${target.id}"]`);
   if (!sourceEl || !targetEl) return finish();
   const sourceSide = attacker.team === "ally" ? "ally" : "enemy";
-  const actionText = event.skilled ? `<span class="skill-name">${event.skillName}</span>` : "普通攻击";
+  const cloneText = event.skillId === "shadow-clone-rush" ? ` Lv.${event.skillLevel}（${event.skillCloneCount} 个分身，${event.skillMultiplier.toFixed(1)}×）` : "";
+  const actionText = event.skilled ? `<span class="skill-name">${event.skillName}${cloneText}</span>` : "普通攻击";
   const resultText = event.dodged ? '<span class="dodge-text">闪避</span>' : `${event.critical ? '<b class="critical-text">暴击</b> ' : ""}<span class="damage-text">-${event.damage}</span>`;
   const timings = ANIMATION_TIMING.attack;
   const playbackMultiplier = fast ? timings.fastPlaybackMultiplier : 1;
@@ -324,7 +684,7 @@ function playEvent(event, finish) {
   targetEl.style.setProperty("--hit-duration", `${scaled(380)}ms`);
   targetEl.style.setProperty("--hit-shake-duration", `${scaled(110)}ms`);
   targetEl.style.setProperty("--dodge-duration", `${scaled(300)}ms`);
-  targetEl.style.setProperty("--impact-fx-duration", `${scaled(340)}ms`);
+  targetEl.style.setProperty("--impact-fx-duration", `${scaled(event.attackType === "melee" ? 260 : 340)}ms`);
   if (event.skilled) {
     sourceEl.classList.add("is-casting");
     const stamp = $("#battle-stamp");
@@ -369,9 +729,10 @@ function playEvent(event, finish) {
     target.alive = event.targetHp > 0;
     if (isMelee) {
       sourceEl.classList.remove("is-melee-running");
-      stopRunCycle();
+      stopSpriteFrameCycle(sourceEl);
       sourceEl.classList.add("is-punching");
-      showFighterFrame(sourceEl, attacker, "meleeAttack", "punch");
+      const punchFrames = animationFrameNames(attacker, "meleeAttack", "punch_");
+      if (punchFrames.length) startFrameCycle(sourceEl, attacker, "meleeAttack", punchFrames, scaled(actionTiming.punchMs / punchFrames.length), false);
       animationStageTimer = window.setTimeout(() => {
         sourceEl.classList.remove("is-punching");
         startRunCycle(sourceEl, attacker, scaled(actionTiming.runFrameMs));
@@ -385,17 +746,36 @@ function playEvent(event, finish) {
     damage.classList.remove("pop");
     void damage.offsetWidth;
     damage.classList.add("pop");
-    if (event.dodged) targetEl.classList.add("is-dodging");
+    if (event.dodged) {
+      targetEl.classList.add("is-dodging");
+      const dodgeFrames = animationFrameNames(target, "dodge");
+      if (dodgeFrames.length) startFrameCycle(targetEl, target, "dodge", dodgeFrames, scaled(300 / dodgeFrames.length), false);
+    }
     else {
       const stunned = Math.random() < 0.5;
       targetEl.classList.add("is-hit", "is-impact", stunned ? "is-hit-stun" : "is-hit-recoil");
-      if (stunned) showFighterFrame(targetEl, target, "hit", "hit_x");
+      const hitFrames = target.animations?.hit?.frames;
+      if (hitFrames) {
+        const sequence = [stunned ? "dizzy" : "hurt", "recover"].filter((name) => typeof hitFrames[name] === "string");
+        if (sequence.length) startFrameCycle(targetEl, target, "hit", sequence, scaled(180), false);
+      }
       if (event.critical) targetEl.classList.add("is-critical");
       const burst = targetEl.querySelector(".impact-burst");
-      burst?.classList.remove("play");
-      if (burst) { void burst.offsetWidth; burst.classList.add("play"); }
+      if (burst) {
+        burst.classList.remove("play", "melee-impact", "melee-from-right");
+        burst.style.removeProperty("left");
+        burst.style.removeProperty("top");
+        if (event.attackType === "melee") {
+          burst.classList.add("melee-impact");
+          if (positionMeleeImpact(burst, sourceEl, targetEl)) burst.classList.add("melee-from-right");
+        }
+        void burst.offsetWidth;
+        burst.classList.add("play");
+      }
     }
-    addLog(`<span class="round-label">R${event.round}</span> <b>${attacker.name}</b> ${actionText} → <b>${target.name}</b> ${resultText}`, event.skilled ? "log-skill" : sourceSide === "enemy" ? "log-enemy" : "");
+    if (Number.isFinite(event.targetDef)) target.def = event.targetDef;
+    const extraEffectText = event.defenseReduced > 0 ? ` <span class="skill-name">DEF -${event.defenseReduced}</span>` : "";
+    addLog(`<span class="round-label">R${event.round}</span> <b>${attacker.name}</b> ${actionText} → <b>${target.name}</b> ${resultText}${extraEffectText}`, event.skilled ? "log-skill" : sourceSide === "enemy" ? "log-enemy" : "");
     updateHealth(target);
     if (event.dodged) addLog(`<b>${target.name}</b> 闪开了攻击`, "log-dodge");
     if (event.targetDied) {
@@ -404,14 +784,18 @@ function playEvent(event, finish) {
       clearSpriteFrame(targetEl);
       targetEl.classList.remove("is-hit", "is-dodging", "is-critical", "is-impact");
       targetEl.classList.remove("is-hit-stun", "is-hit-recoil");
-      targetEl.style.setProperty("--death-duration", `${scaled(timings.deathMs)}ms`);
+      const deathDuration = target.team === "ally" ? Math.max(scaled(timings.deathMs), scaled(ANIMATION_TIMING.boss.defeatFallMs)) : scaled(timings.deathMs);
+      targetEl.style.setProperty("--death-duration", `${deathDuration}ms`);
       targetEl.classList.add("is-dead");
+      const deathFrames = animationFrameNames(target, "death");
+      if (deathFrames.length) startFrameCycle(targetEl, target, "death", deathFrames, scaled(timings.deathMs / deathFrames.length), false);
       addLog(`<b>${target.name}</b> 倒下了`, "log-death");
     } else if (!event.dodged) {
       window.clearTimeout(targetHitTimer);
       targetHitTimer = window.setTimeout(() => {
         clearSpriteFrame(targetEl);
         targetEl.classList.remove("is-hit", "is-impact", "is-critical", "is-hit-stun", "is-hit-recoil");
+        startIdleCycle(targetEl, target);
         targetHitTimer = null;
       }, scaled(380));
     }
@@ -419,7 +803,6 @@ function playEvent(event, finish) {
 
   const delay = duration + eventGap;
   timer = window.setTimeout(() => {
-    stopRunCycle();
     sourceEl.classList.remove("is-attacking", "is-melee-rushing", "is-melee-running", "is-punching", "is-casting", "is-magic-attacking", "is-ranged-attacking");
     targetEl.classList.remove("is-hit", "is-dodging", "is-critical", "is-impact", "is-hit-stun", "is-hit-recoil");
     sourceEl.style.removeProperty("--melee-x");
@@ -432,16 +815,23 @@ function playEvent(event, finish) {
     targetEl.style.removeProperty("--impact-fx-duration");
     const burst = targetEl.querySelector(".impact-burst");
     burst?.classList.remove("play");
-    if (!event.targetDied) clearSpriteFrame(targetEl);
+    burst?.classList.remove("melee-impact", "melee-from-right");
+    burst?.style.removeProperty("left");
+    burst?.style.removeProperty("top");
+    if (!event.targetDied) {
+      clearSpriteFrame(targetEl);
+      startIdleCycle(targetEl, target);
+    }
     if (event.attackType === "melee") sourceEl.classList.remove("is-casting");
     clearSpriteFrame(sourceEl);
+    if (attacker.alive) startIdleCycle(sourceEl, attacker);
     animationStageTimer = null;
     finish();
   }, delay);
 }
 
 function playNext(token) {
-  if (token !== generation || !playback) return;
+  if (token !== generation || !playback || playbackPaused) return;
   if (playback.index >= playback.events.length) {
     playback = null;
     setBattleControls(false);
@@ -460,16 +850,30 @@ function beginBattle() {
   clearEffects();
   viewState = initializeBattle(prepared.roster);
   buildHealthRows(viewState.characters);
+  for (const character of viewState.characters) {
+    const fighter = document.querySelector(`[data-character="${character.id}"]`);
+    if (fighter) startIdleCycle(fighter, character);
+  }
   $("#arena-location").textContent = prepared.battle.location;
+  $("#boss-warning").hidden = prepared.battle.type !== "boss";
   const typeNames = { normal: "普通战", "normal-hard": "强化普通战", elite: "精英战", boss: "首领战" };
   $("#battle-stage-label").textContent = `第 ${prepared.battle.step} / 10 步 · ${typeNames[prepared.battle.type]}`;
   log.innerHTML = "";
+  playbackPaused = false;
+  battleLogExpanded = false;
+  pausedContinuation = null;
+  updateBattleLogPanel();
   displayedEvents = 0;
   $("#log-count").textContent = "战斗进行中";
   addLog(`第 ${prepared.battle.number} 场开始：${prepared.battle.title}`, "log-start");
+  if (prepared.battle.type === "boss") {
+    addLog("迪达拉的 C0 每个完整行动回合积累 100 点真实伤害；C4 迦楼罗有 50% 概率造成 1.2 倍伤害并降低目标 DEF 20 点。", "log-enemy");
+  }
   try {
-    pendingResult = simulateBattle(prepared.roster);
+    pendingResult = simulateBattle(prepared.roster, Math.random, prepared.combatOptions);
     playback = { ...pendingResult, index: 0 };
+    battleStatusState.c0 = pendingResult.c0 ? { completedRounds: 0, accumulatedDamage: 0, detonated: false } : null;
+    renderAllyStatusIcons();
   } catch (error) {
     console.error("Battle initialization failed:", error);
     setStatus("战斗启动失败", "finished");
@@ -491,6 +895,8 @@ function renderRoute() {
   const hero = STARTING_CHARACTERS.find((character) => character.id === campaign.playerId);
   $("#route-player-img").src = hero.asset;
   $("#route-player-name").textContent = hero.name;
+  $(".route-player").dataset.characterDetail = hero.id;
+  $(".route-player").setAttribute("aria-label", `查看${hero.name}的属性和技能`);
   updateBossProgress();
   const signs = $("#route-signs");
   signs.innerHTML = "";
@@ -510,12 +916,7 @@ function renderRoute() {
       const selected = chooseRoute(campaign, node.id);
       if (!selected) return;
       if (selected.type === "event") {
-        renderEvent(selected);
-        const result = resolveRouteEvent(campaign);
-        if (!result) return;
-        eventResultShown = true;
-        $("#event-effect").textContent = result.result;
-        $("#resolve-event-btn").textContent = "继续前进";
+        renderCampaignEvent();
       }
       else beginBattle();
     });
@@ -539,6 +940,8 @@ function renderEvent(selection = {}) {
 function renderEnding() {
   if (!campaign || !["victory", "defeat"].includes(campaign.status)) return;
   const won = campaign.status === "victory";
+  $("#ending-screen").classList.toggle("is-victory", won);
+  $("#ending-screen").classList.toggle("is-defeat", !won);
   $("#ending-mark").textContent = won ? "★" : "…";
   $("#ending-title").textContent = won ? "第一大关通关！" : "本局挑战结束";
   $("#ending-copy").textContent = won
@@ -546,6 +949,156 @@ function renderEnding() {
     : (STARTING_CHARACTERS.find((character) => character.id === campaign.playerId)?.name ?? "角色") + "倒下了，旅程止步于第 " + campaign.step + " 步。";
   $("#ending-count").textContent = "路线推进 " + Math.min(campaign.step, 10) + " / 10 · 完成战斗 " + campaign.completedBattles + " · 最终生命 " + campaign.playerHp + " / " + campaign.playerMaxHp;
   setScreen("ending-screen");
+}
+
+function renderStartingSkillSelection(character) {
+  const skills = (character.activeSkills ?? []).map((id) => {
+    const config = SKILL_DATA[id];
+    const effect = config?.levels?.[1] ?? {};
+    return decisionChoice(id, `${config?.name ?? id} · Lv.1`, `${config?.description ?? "主动技能"} ${displaySkillEffect({ ...config, ...effect })}`);
+  });
+  renderDecisionScreen("选择一项初始主动技能", "被动技能会自动生效。确认后开始第一步探索。", skills, "学习技能并开始旅程", (skillId) => {
+    if (!chooseStartingSkill(campaign, skillId)) return false;
+    beginJourney(campaign);
+    renderRoute();
+    return true;
+  }, "ACT 01 · FIRST SKILL");
+}
+
+function renderBattleReward() {
+  if (!campaign || campaign.status !== "reward") return;
+  const offer = getCampaignRewardOffer(campaign);
+  if (!offer) return;
+  if (campaign.rewardPhase === "stat") {
+    const choices = offer.statChoices.map((id) => {
+      const upgrade = ATTRIBUTE_UPGRADES.find((entry) => entry.id === id);
+      return decisionChoice(id, upgrade?.name ?? id, upgrade?.description ?? "属性强化");
+    });
+    renderDecisionScreen(campaign.rewardBattleType === "elite" ? "精英战胜利 · 属性强化" : "战斗胜利 · 属性强化", "选择一项强化，它会影响后续战斗。", choices, "应用强化", (id) => {
+      const result = claimCampaignReward(campaign, id);
+      if (!result) return false;
+      if (result.phase === "bonus") renderBattleReward();
+      else {
+        updateProgressionDisplays();
+        renderRoute();
+      }
+      return true;
+    }, "ACT 01 · BATTLE REWARD");
+    return;
+  }
+
+  if (campaign.rewardPhase === "bonus") {
+    const choices = offer.extraChoices.map((id) => {
+      if (id === "heal") return decisionChoice(id, "休整", `恢复最大生命的 15%（最多 ${Math.floor(campaign.runCharacterState.maxHp * 0.15)} HP）。`);
+      const names = offer.upgradeableSkills.map((skillId) => {
+        const current = getSkillAtLevel(campaign.runCharacterState, skillId);
+        return `${current.name} Lv.${current.level} → Lv.${current.level + 1}`;
+      }).join("、");
+      return decisionChoice(id, "技能精进", names || "没有可升级技能，改为休整。", !offer.upgradeableSkills.length);
+    });
+    renderDecisionScreen("精英额外奖励", "属性强化已领取，再选择一项精英奖励。", choices, "选择额外奖励", (id) => {
+      if (id === "skill_upgrade") {
+        const skills = offer.upgradeableSkills.map((skillId) => {
+          const current = getSkillAtLevel(campaign.runCharacterState, skillId);
+          const next = SKILL_DATA[skillId].levels[current.level + 1];
+          return decisionChoice(skillId, `${current.name} · Lv.${current.level} → Lv.${current.level + 1}`, displaySkillEffect({ ...current, ...next }));
+        });
+        renderDecisionScreen("选择升级技能", "技能效果按配置提升。", skills, "升级技能", (skillId) => {
+          const result = claimCampaignReward(campaign, "skill_upgrade", null, skillId);
+          if (!result) return false;
+          updateProgressionDisplays();
+          renderRoute();
+          return true;
+        }, "ACT 01 · ELITE REWARD");
+        return true;
+      }
+      const result = claimCampaignReward(campaign, id);
+      if (!result) return false;
+      updateProgressionDisplays();
+      renderRoute();
+      return true;
+    }, "ACT 01 · ELITE REWARD");
+  }
+}
+
+function finishEventAndAdvance() {
+  const next = completeLocation(campaign);
+  updateProgressionDisplays();
+  if (next === "route") renderRoute();
+  else if (next === "combat") beginBattle();
+  return next === "route" || next === "combat";
+}
+
+function renderEventResult(result) {
+  renderDecisionScreen(campaign.activeEventType === "campfire" ? "篝火休整完成" : `${campaign.pendingEvent?.name ?? "奇遇"} · 已完成`, describeEventResult(result), [decisionChoice("__continue__", "继续前进", `前往第 ${Math.min(10, campaign.step + 1)} 步。`)], "继续前进", () => finishEventAndAdvance(), "ACT 01 · EVENT RESULT");
+}
+
+function resolveVisibleEvent(choiceId, skillId = null) {
+  const result = resolveCampaignEvent(campaign, choiceId, skillId);
+  if (!result) return false;
+  updateProgressionDisplays();
+  return finishEventAndAdvance();
+}
+
+function renderCampfire() {
+  const options = getActiveCampfireOptions(campaign);
+  if (!options) return;
+  const rest = options[0];
+  const upgrade = options[1];
+  renderDecisionScreen("篝火", "在此选择休息治疗，或升级一项已学习的主动技能。", [
+    decisionChoice("rest", "休息治疗", `恢复 ${rest.healAmount} HP（当前 ${campaign.runCharacterState.currentHp}/${campaign.runCharacterState.maxHp}）。`),
+    decisionChoice("skill_upgrade", "技能升级", upgrade.enabled ? upgrade.skills.map((entry) => `${entry.name} Lv.${entry.currentLevel} → Lv.${entry.nextLevel}`).join("、") : upgrade.reason, !upgrade.enabled),
+  ], "确认选择", (id) => {
+    if (id === "rest") return resolveVisibleEvent("rest");
+    if (id === "skill_upgrade") {
+      const choices = upgrade.skills.map((entry) => decisionChoice(entry.skillId, `${entry.name} · Lv.${entry.currentLevel} → Lv.${entry.nextLevel}`, displaySkillEffect({ ...entry.currentEffect, ...entry.nextEffect })));
+      renderDecisionScreen("选择升级技能", "只列出已学习且未满级的主动技能。", choices, "升级技能", (skillId) => resolveVisibleEvent("skill_upgrade", skillId), "ACT 01 · CAMPFIRE");
+      return true;
+    }
+    return false;
+  }, "ACT 01 · CAMPFIRE");
+}
+
+function renderAdventureEvent() {
+  const record = campaign?.pendingEvent;
+  if (!record) return;
+  if (record.containsBattle) {
+    renderDecisionScreen(record.name, `${record.description} ${record.effectText}`, [decisionChoice("start_battle", "迎战精英", "战斗结果将使用当前属性和技能结算。")], "开始战斗", () => {
+      const battle = startCampaignEventBattle(campaign);
+      if (!battle) return false;
+      beginBattle();
+      return true;
+    }, "ACT 01 · ENCOUNTER", record.image);
+    return;
+  }
+
+  const choices = [];
+  if (record.type === "learn_skill") {
+    for (const id of record.data.skillChoices) {
+      const config = SKILL_DATA[id];
+      choices.push(decisionChoice(id, `${config.name} · Lv.1`, `${config.description} ${displaySkillEffect({ ...config, ...config.levels[1] })}`));
+    }
+  } else {
+    choices.push(decisionChoice("__confirm__", "继续前进", record.effectText));
+  }
+  renderDecisionScreen(record.name, record.description, choices, "确认事件", (id) => resolveVisibleEvent(id === "__confirm__" ? null : id), "ACT 01 · ADVENTURE", record.image);
+}
+
+function renderCampaignEvent() {
+  if (!campaign || campaign.status !== "event") return;
+  if (campaign.eventResolved) renderEventResult(campaign.activeNode?.resolutionResult);
+  else if (campaign.activeEventType === "campfire") renderCampfire();
+  else renderAdventureEvent();
+}
+
+function updateProgressionDisplays() {
+  if (!campaign?.runCharacterState) return;
+  campaign.playerHp = campaign.runCharacterState.currentHp;
+  campaign.playerMaxHp = campaign.runCharacterState.maxHp;
+  $("#route-player-hp").textContent = `HP ${campaign.playerHp} / ${campaign.playerMaxHp}`;
+  $("#route-health").textContent = `${campaign.playerHp} / ${campaign.playerMaxHp}`;
+  renderAllyStatusIcons();
+  if (characterDialog.open && detailCharacterId) openCharacterDetail(detailCharacterId);
 }
 
 function renderCandidateSelection() {
@@ -569,8 +1122,30 @@ function renderCandidateSelection() {
   setScreen("character-select-screen");
 }
 
-function playEntryAnimation(character) {
+function preloadEntryAssets(character) {
+  const animationAssets = Object.values(character.animations ?? {}).flatMap((animation) => [
+    animation.asset,
+    ...Object.values(animation.frames ?? {}),
+  ]);
+  const assets = [...new Set([character.asset, ...animationAssets].filter((asset) => typeof asset === "string"))];
+  return Promise.all(assets.map((src) => new Promise((resolve) => {
+    const image = new Image();
+    const ready = () => {
+      if (typeof image.decode === "function") image.decode().catch(() => {}).then(resolve);
+      else resolve();
+    };
+    image.onload = ready;
+    image.onerror = resolve;
+    image.src = src;
+    if (image.complete) ready();
+  })));
+}
+
+async function playEntryAnimation(character) {
   if (!campaign || campaign.status !== "entry") return;
+  const animationToken = ++entryAnimationToken;
+  await preloadEntryAssets(character);
+  if (!campaign || campaign.status !== "entry" || animationToken !== entryAnimationToken) return;
   $("#entry-character-name").textContent = character.name;
   $("#entry-character-img").src = character.asset;
   $("#entry-character-img").alt = character.name;
@@ -586,10 +1161,8 @@ function playEntryAnimation(character) {
   let index = 0;
   const runPose = () => {
     if (index >= sequence.length) {
-      beginJourney(campaign);
-      updateBossProgress();
-      if (campaign.status === "route") renderRoute();
-      else beginBattle();
+      if (animationToken !== entryAnimationToken) return;
+        renderStartingSkillSelection(character);
       return;
     }
     const pose = sequence[index++];
@@ -606,7 +1179,7 @@ function playEntryAnimation(character) {
 
 function confirmStartingCharacter() {
   if (!campaign || campaign.status !== "character-select" || !selectedCandidateId) return;
-  const character = selectStartingCharacter(campaign, selectedCandidateId);
+  const character = selectStartingCharacter(campaign, selectedCandidateId, null);
   if (!character) return;
   $("#route-player-img").src = character.asset;
   $("#route-player-name").textContent = character.name;
@@ -621,11 +1194,11 @@ function confirmStartingCharacter() {
   hero.querySelector(".fighter-name").textContent = character.name;
   hero.querySelector(".sprite").src = character.asset;
   hero.dataset.character = character.id;
-  hero.querySelector(".position-tag").textContent = character.row === "front" ? "前排" : "后排";
   playEntryAnimation(character);
 }
 
 function showCharacterSelectionForNewRun() {
+  entryAnimationToken += 1;
   campaign = createCampaign();
   selectedCandidateId = null;
   startCampaign(campaign);
@@ -676,6 +1249,10 @@ function restartToCharacterSelection() {
   window.clearTimeout(animationStageTimer);
   playback = null;
   pendingResult = null;
+  decisionHandler = null;
+  selectedDecisionId = null;
+  decisionBusy = false;
+  decisionRevision += 1;
   fast = false;
   speedButton.classList.remove("is-active");
   $("#speed-label").textContent = "关";
@@ -688,6 +1265,14 @@ function restartToCharacterSelection() {
 document.querySelectorAll("[data-character-detail]").forEach((button) => {
   button.addEventListener("click", () => openCharacterDetail(button.dataset.characterDetail));
 });
+const toggleStatusIcon = (event) => {
+  const button = event.target.closest("[data-status-id]");
+  if (!button) return;
+  selectedStatusId = selectedStatusId === button.dataset.statusId ? null : button.dataset.statusId;
+  renderAllyStatusIcons();
+};
+$("#ally-status-icons").addEventListener("click", toggleStatusIcon);
+$("#enemy-status-icons").addEventListener("click", toggleStatusIcon);
 $("#character-dialog-close").addEventListener("click", () => {
   if (typeof characterDialog.close === "function") characterDialog.close();
   else characterDialog.removeAttribute("open");
@@ -696,16 +1281,15 @@ characterDialog.addEventListener("click", (event) => {
   if (event.target === characterDialog && typeof characterDialog.close === "function") characterDialog.close();
 });
 restartRunButton.addEventListener("click", restartToCharacterSelection);
-$("#confirm-character-btn").addEventListener("click", confirmStartingCharacter);
-$("#resolve-event-btn").addEventListener("click", () => {
-  if (!eventResultShown) return;
-  eventResultShown = false;
-  const nextState = completeLocation(campaign);
-  if (nextState === "route") renderRoute();
-  else if (nextState === "combat") beginBattle();
+logToggle.addEventListener("click", toggleBattleLog);
+log.addEventListener("click", () => {
+  if (playback) pauseForBattleLog();
+  else { battleLogExpanded = !battleLogExpanded; updateBattleLogPanel(); }
 });
+$("#confirm-character-btn").addEventListener("click", confirmStartingCharacter);
+$("#decision-confirm").addEventListener("click", confirmDecision);
 speedButton.addEventListener("click", () => {
-  if (!campaign || campaign.status !== "combat" || !playback) return;
+  if (!campaign || campaign.status !== "combat" || !playback || playbackPaused) return;
   fast = !fast;
   speedButton.classList.toggle("is-active", fast);
   $("#speed-label").textContent = fast ? "开" : "关";
@@ -714,3 +1298,6 @@ speedButton.addEventListener("click", () => {
 setBattleControls(false);
 initializeGame();
 window.__pixelBattleReady = true;
+
+
+

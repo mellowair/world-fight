@@ -32,6 +32,14 @@
         <h1 id="entry-character-name"></h1><p id="entry-caption" class="entry-caption">登场！</p>
       </section>
 
+      <section id="decision-screen" class="flow-screen decision-screen" aria-label="成长选择" hidden>
+        <header class="flow-header"><div><p class="eyebrow" id="decision-kicker">ACT 01 · GROWTH</p><h1 id="decision-title">选择成长</h1></div><span id="decision-step" class="progress-chip">本局成长</span></header>
+        <img id="decision-event-image" class="decision-event-image" hidden alt="">
+        <p id="decision-copy" class="flow-copy"></p>
+        <div id="decision-options" class="decision-options"></div>
+        <button id="decision-confirm" class="control-btn primary decision-confirm" type="button" disabled>确认</button>
+      </section>
+
       <section id="battle-screen" class="flow-screen battle-screen" aria-label="自动战斗" hidden>
       <header class="topbar">
         <div class="brand-mark" aria-hidden="true">木</div>
@@ -43,12 +51,21 @@
         <div class="health-side ally-health">
           <div class="side-heading"><span class="side-dot ally-dot"></span><span>我方</span></div>
           <div id="health-bars" class="health-bars"></div>
+          <div id="ally-status-icons" class="ally-status-icons" aria-label="当前状态" hidden></div>
+          <div id="ally-status-detail" class="ally-status-detail" aria-live="polite" hidden></div>
         </div>
         <div class="health-side enemy-health">
           <div class="side-heading"><span class="side-dot enemy-dot"></span><span>敌方</span></div>
           <div id="enemy-health-bars" class="health-bars"></div>
+          <div id="enemy-status-icons" class="ally-status-icons enemy-status-icons" aria-label="敌方状态" hidden></div>
+          <div id="enemy-status-detail" class="ally-status-detail enemy-status-detail" aria-live="polite" hidden></div>
         </div>
       </section>
+
+      <aside class="boss-battle-warning" id="boss-warning" aria-live="polite" hidden>
+        <span class="warning-mark" aria-hidden="true">!</span>
+        <b>艺术就是爆炸！要尽快击败迪达拉！</b>
+      </aside>
 
       <section class="arena" aria-label="战斗区域">
         <div class="arena-sky" aria-hidden="true"></div>
@@ -58,17 +75,17 @@
         <div class="fighter fighter-guard" data-character="guard">
           <div class="fighter-name">守卫</div>
           <div class="sprite-wrap"><img src="assets/guard.svg" alt="像素守卫" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
-          <div class="ground-shadow"></div><div class="position-tag">前排</div>
+          <div class="ground-shadow"></div>
         </div>
         <div class="fighter fighter-mage" data-character="mage">
           <div class="fighter-name">法师</div>
           <div class="sprite-wrap"><img src="assets/mage.svg" alt="像素法师" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
-          <div class="ground-shadow"></div><div class="position-tag">后排</div>
+          <div class="ground-shadow"></div>
         </div>
         <div id="hero-fighter" class="fighter fighter-naruto" data-character="naruto">
           <div class="fighter-name">鸣人</div>
           <div class="sprite-wrap"><img src="assets/naruto-v2/frames/idle.svg" alt="像素忍者鸣人" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span><span class="skill-burst"></span></div>
-          <div class="ground-shadow"></div><div class="position-tag">前排 · 战士</div>
+          <div class="ground-shadow"></div>
         </div>
         <div class="arena-ground"></div>
       </section>
@@ -87,7 +104,7 @@
 
       <section class="battle-tools">
         <div class="log-panel">
-          <div class="section-heading"><div><span class="heading-icon">▤</span><h2>战斗记录</h2></div><span id="log-count" class="log-count">等待开战</span></div>
+          <div class="section-heading"><div><span class="heading-icon">▤</span><h2>战斗记录</h2></div><div class="log-heading-actions"><span id="log-count" class="log-count">等待开战</span><button id="battle-log-toggle" class="log-toggle" type="button" aria-expanded="false" aria-controls="battle-log">暂停并查看</button></div></div>
           <ol id="battle-log" class="battle-log" aria-live="polite" aria-relevant="additions"></ol>
         </div>
         <div class="controls" aria-label="战斗操作">
@@ -103,7 +120,7 @@
         <p class="flow-copy">前方有两条路，选一条继续探索。</p>
         <div class="route-landscape">
           <div class="route-hill hill-left"></div><div class="route-hill hill-right"></div>
-          <div class="route-player"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span><small id="route-player-hp">HP 1200 / 1200</small></div>
+          <button class="route-player" type="button" data-character-detail="naruto" aria-haspopup="dialog" aria-label="查看鸣人的属性和技能"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span><small id="route-player-hp">HP 1200 / 1200</small></button>
           <div id="route-signs" class="route-signs"></div>
           <div class="route-ground"></div>
         </div>
@@ -124,7 +141,7 @@
         <button id="restart-run-btn" class="control-btn primary intro-start" type="button"><span class="button-icon">↻</span><span>重新开始游戏</span></button>
       </section>
       <aside id="boss-distance" class="boss-distance" aria-label="Boss距离" hidden>
-        <div id="boss-distance-party" class="boss-distance-party"></div><div class="boss-distance-track"><i id="boss-distance-fill"></i></div><span class="boss-distance-icon" aria-label="Boss">☠</span>
+        <div class="boss-distance-track" aria-label="前往 Boss 的路线进度"><i id="boss-distance-fill"></i><img id="boss-distance-player" class="distance-portrait" alt=""></div><img class="boss-distance-icon" src="assets/route-signs/demon.png" alt="Boss 路牌">
       </aside>
     </main>
 <dialog id="character-dialog" class="character-dialog" aria-labelledby="character-dialog-title">
@@ -139,3 +156,6 @@
     <script type="module" src="app.js"></script>
   </body>
 </html>
+
+
+

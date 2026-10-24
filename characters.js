@@ -1,12 +1,15 @@
 // All balance values and lineup order live here.
 export const CHARACTER_DATA = [
   {
-    id: "naruto", name: "鸣人", team: "ally", role: "战士", row: "front",
-    hp: 1200, atk: 150, def: 60, spd: 80, attackType: "melee",
+    id: "naruto", name: "鸣人", team: "ally", role: "战士", row: "front", position: "front",
+    hp: 1400, atk: 170, def: 65, spd: 85, baseStats: { maxHp: 1400, atk: 170, def: 65, spd: 85, critRate: 0.05, critMultiplier: 1.5 },
+    activeSkills: ["shadow-clone-rush", "rasengan"], passiveSkillId: "jinchuriki", attackType: "melee",
     skill: { id: "shadow-clone-rush", name: "影分身突袭", chance: 0.25, multiplier: 1.8, effectType: "damage", attackType: "melee" }, deathPose: "cute-flop",
     asset: "assets/naruto-v2/frames/idle.svg", rosterOrder: 0,
     animations: {
-      idle: { type: "static", asset: "assets/naruto-v2/frames/idle.svg" },
+      idle: { type: "frames", frames: {
+        idle: "assets/naruto-v2/frames/idle.svg",
+      } },
       fall: { type: "static", asset: "assets/naruto-v2/frames/idle.svg" },
       pose: { type: "frames", frames: {
         landed: "assets/naruto-v2/frames/idle.svg",
@@ -22,22 +25,26 @@ export const CHARACTER_DATA = [
       meleeAttack: { type: "frames", frames: {
         ready: "assets/naruto-v2/frames/idle.svg",
         approach: "assets/naruto-v2/frames/run_a.svg",
-        punch: "assets/naruto-v2/frames/punch.svg",
+        punch_1: "assets/naruto-v2/frames/punch.svg",
+        recover: "assets/naruto-v2/frames/run_b.svg",
+      } },
+      hit: { type: "frames", frames: {
+        hurt: "assets/naruto-v2/frames/hit_x.svg",
+        dizzy: "assets/naruto-v2/frames/hit_x.svg",
         recover: "assets/naruto-v2/frames/idle.svg",
       } },
-      hit: { type: "frames", frames: { hit_x: "assets/naruto-v2/frames/hit_x.svg" } },
-      dodge: { type: "css", baseAsset: "assets/naruto-v2/frames/idle.svg" },
-      death: { type: "css", baseAsset: "assets/naruto-v2/frames/idle.svg" },
     },
   },
   {
-    id: "guard", name: "守卫", team: "enemy", role: "守卫", row: "front",
-    hp: 1200, atk: 100, def: 60, spd: 60, skill: null, attackType: "melee", deathPose: "cute-flop",
+    id: "guard", name: "守卫", team: "enemy", role: "守卫", row: "front", position: "front",
+    hp: 450, atk: 80, def: 20, spd: 50, baseStats: { maxHp: 450, atk: 80, def: 20, spd: 50, critRate: 0.05, critMultiplier: 1.5 },
+    activeSkills: ["shield-bash", "guardian-stance"], passiveSkillId: "steadfast-guard", skill: null, attackType: "melee", deathPose: "cute-flop",
     asset: "assets/guard.svg", rosterOrder: 1,
   },
   {
-    id: "mage", name: "法师", team: "enemy", role: "法师", row: "back",
-    hp: 600, atk: 120, def: 20, spd: 80, skill: null, attackType: "magic", deathPose: "cute-flop",
+    id: "mage", name: "法师", team: "enemy", role: "法师", row: "back", position: "back",
+    hp: 450, atk: 80, def: 20, spd: 50, baseStats: { maxHp: 450, atk: 80, def: 20, spd: 50, critRate: 0.05, critMultiplier: 1.5 },
+    activeSkills: ["firebolt", "arcane-ward"], passiveSkillId: "mana-spark", skill: null, attackType: "magic", deathPose: "cute-flop",
     asset: "assets/mage.svg", rosterOrder: 2,
   },
 ];
@@ -60,6 +67,7 @@ export const ANIMATION_TIMING = {
   entryDropMs: 1050,
   entryDustDelayMs: 950,
   entryPoseMs: 2000,
+  boss: { c0WarningMs: 2400, defeatFallMs: 1900, defeatHoldMs: 3000 },
   attack: {
     fastPlaybackMultiplier: 2,
     eventGapMs: 330,
@@ -83,8 +91,9 @@ export const STARTING_CHARACTERS = [
       { state: "thumbs-up", caption: "出发！", duration: 350 },
     ] },
   {
-    id: "starter-guardian", name: "木叶护卫", team: "ally", role: "守卫", row: "front",
-    hp: 1320, atk: 105, def: 75, spd: 58, skill: null, attackType: "melee", deathPose: "cute-flop",
+    id: "starter-guardian", name: "木叶护卫", team: "ally", role: "守卫", row: "front", position: "front",
+    hp: 1320, atk: 105, def: 75, spd: 58, baseStats: { maxHp: 1320, atk: 105, def: 75, spd: 58, critRate: 0.05, critMultiplier: 1.5 },
+    activeSkills: ["shield-bash", "guardian-stance"], passiveSkillId: "steadfast-guard", skill: null, attackType: "melee", deathPose: "cute-flop",
     asset: "assets/guard.svg", rosterOrder: 0, entryPose: "steady",
     poseSequence: [{ state: "ready", caption: "守护准备就绪", duration: 800 }],
   },
@@ -93,11 +102,11 @@ export const STARTING_CHARACTERS = [
 // Encounter definitions scale the existing enemy templates without changing
 // their base character data. The arena can reuse the existing guard/mage art.
 export const CAMPAIGN_BATTLES = [
-  { number: 1, type: "normal", title: "风车原野", location: "风车原野", description: "击退拦路的巡逻队。", enemies: ["guard"], hpScale: 0.58, atkScale: 0.78, defScale: 0.8, enemyNames: { guard: "巡逻守卫" } },
-  { number: 2, type: "normal", title: "溪谷小径", location: "溪谷小径", description: "穿过溪谷，继续前进。", enemies: ["mage"], hpScale: 0.82, atkScale: 0.82, defScale: 0.9, enemyNames: { mage: "溪谷术师" } },
-  { number: 3, type: "normal-hard", title: "古木关隘", location: "古木关隘", description: "更强的敌人守着关口。", enemies: ["guard", "mage"], hpScale: 0.5, atkScale: 0.62, defScale: 0.75, enemyNames: { guard: "强化守卫", mage: "咒术师" } },
-  { number: 4, type: "elite", title: "精英哨站", location: "精英哨站", description: "精英敌人挡住了去路。", enemies: ["guard"], hpScale: 1.05, atkScale: 0.86, defScale: 0.9, enemyNames: { guard: "精英守卫" } },
-  { number: 5, type: "boss", title: "风之遗迹", location: "风之遗迹", description: "击败首领，完成第一大关。", enemies: ["guard"], hpScale: 1.35, atkScale: 0.92, defScale: 0.95, enemyNames: { guard: "遗迹首领" } },
+  { number: 1, type: "normal", title: "风车原野", location: "风车原野", description: "击退拦路的巡逻队。", enemies: ["guard"], enemyNames: { guard: "巡逻守卫" } },
+  { number: 2, type: "normal", title: "溪谷小径", location: "溪谷小径", description: "穿过溪谷，继续前进。", enemies: ["mage"], enemyNames: { mage: "溪谷术师" } },
+  { number: 3, type: "normal-hard", title: "古木关隘", location: "古木关隘", description: "更强的敌人守着关口。", enemies: ["guard", "mage"], enemyNames: { guard: "强化守卫", mage: "咒术师" } },
+  { number: 4, type: "elite", title: "精英哨站", location: "精英哨站", description: "精英敌人挡住了去路。", enemies: ["guard"], enemyNames: { guard: "精英守卫" }, enemyBaseStats: { guard: { hp: 900, atk: 115, def: 35, spd: 65 } } },
+  { number: 5, type: "boss", title: "迪达拉", location: "迪达拉的艺术现场", description: "击败迪达拉，完成第一大关。", enemies: ["guard"], enemyNames: { guard: "迪达拉" }, enemyBaseStats: { guard: { hp: 2200, atk: 120, def: 40, spd: 75 } }, enemyMechanics: { guard: { c0DamagePerRound: 100 } } },
 ];
 
 export const ADVENTURE_EVENTS = [
@@ -105,3 +114,4 @@ export const ADVENTURE_EVENTS = [
   { id: "scroll", title: "旅人留下的卷轴", description: "卷轴记载着一招临时强化术。", effect: "attack", multiplier: 1.25, effectText: "下一场战斗攻击力提高 25%。" },
   { id: "thorn", title: "荆棘密林", description: "穿越时受了些轻伤。", effect: "damage", amount: 140, effectText: "失去 140 点生命，生命至少保留 1 点。" },
 ];
+
