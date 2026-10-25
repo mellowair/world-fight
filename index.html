@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#8ed9f1">
-    <title>木叶试炼 · 自动战斗原型</title>
+    <title>闪烁</title>
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
@@ -29,13 +29,21 @@
           <div id="entry-actor" class="entry-actor"><img id="entry-character-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="entry-sprite-frame" class="sprite-action" aria-hidden="true"></span></div>
           <div class="entry-ground"></div>
         </div>
-        <h1 id="entry-character-name"></h1><p id="entry-caption" class="entry-caption">登场！</p>
+        <h1 id="entry-character-name"></h1>
+      </section>
+
+      <section id="decision-screen" class="flow-screen decision-screen" aria-label="成长选择" hidden>
+        <header class="flow-header"><div><p class="eyebrow" id="decision-kicker">ACT 01 · GROWTH</p><h1 id="decision-title">选择成长</h1></div><span id="decision-step" class="progress-chip">本局成长</span></header>
+        <img id="decision-event-image" class="decision-event-image" hidden alt="">
+        <p id="decision-copy" class="flow-copy"></p>
+        <div id="decision-options" class="decision-options"></div>
+        <button id="decision-confirm" class="control-btn primary decision-confirm" type="button" disabled>确认</button>
       </section>
 
       <section id="battle-screen" class="flow-screen battle-screen" aria-label="自动战斗" hidden>
       <header class="topbar">
         <div class="brand-mark" aria-hidden="true">木</div>
-        <div class="brand-copy"><p class="eyebrow">PIXEL ROGUELIKE · ACT 01</p><h1>木叶试炼</h1></div>
+        <div class="brand-copy"><p class="eyebrow">PIXEL ROGUELIKE · ACT 01</p><h1>闪烁</h1></div>
         <div class="round-chip"><span class="live-dot"></span><span id="battle-status">准备就绪</span></div>
       </header>
 
@@ -43,12 +51,21 @@
         <div class="health-side ally-health">
           <div class="side-heading"><span class="side-dot ally-dot"></span><span>我方</span></div>
           <div id="health-bars" class="health-bars"></div>
+          <div id="ally-status-icons" class="ally-status-icons" aria-label="当前状态" hidden></div>
+          <div id="ally-status-detail" class="ally-status-detail" aria-live="polite" hidden></div>
         </div>
         <div class="health-side enemy-health">
           <div class="side-heading"><span class="side-dot enemy-dot"></span><span>敌方</span></div>
           <div id="enemy-health-bars" class="health-bars"></div>
+          <div id="enemy-status-icons" class="ally-status-icons enemy-status-icons" aria-label="敌方状态" hidden></div>
+          <div id="enemy-status-detail" class="ally-status-detail enemy-status-detail" aria-live="polite" hidden></div>
         </div>
       </section>
+
+      <aside class="boss-battle-warning" id="boss-warning" aria-live="polite" hidden>
+        <span class="warning-mark" aria-hidden="true">!</span>
+        <b>艺术就是爆炸！要尽快击败迪达拉！</b>
+      </aside>
 
       <section class="arena" aria-label="战斗区域">
         <div class="arena-sky" aria-hidden="true"></div>
@@ -56,19 +73,19 @@
         <div class="battle-stamp" id="battle-stamp" aria-live="polite"></div>
 
         <div class="fighter fighter-guard" data-character="guard">
-          <div class="fighter-name">守卫</div>
-          <div class="sprite-wrap"><img src="assets/guard.svg" alt="像素守卫" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
-          <div class="ground-shadow"></div><div class="position-tag">前排</div>
+          <div class="fighter-name">巨人</div>
+          <div class="sprite-wrap"><img src="assets/normal-enemies/giant.png" alt="巨人" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
+          <div class="ground-shadow"></div>
         </div>
         <div class="fighter fighter-mage" data-character="mage">
-          <div class="fighter-name">法师</div>
-          <div class="sprite-wrap"><img src="assets/mage.svg" alt="像素法师" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
-          <div class="ground-shadow"></div><div class="position-tag">后排</div>
+          <div class="fighter-name">小法师</div>
+          <div class="sprite-wrap"><img src="assets/normal-enemies/mage.png" alt="小法师" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span></div>
+          <div class="ground-shadow"></div>
         </div>
         <div id="hero-fighter" class="fighter fighter-naruto" data-character="naruto">
           <div class="fighter-name">鸣人</div>
           <div class="sprite-wrap"><img src="assets/naruto-v2/frames/idle.svg" alt="像素忍者鸣人" class="sprite"><span class="sprite-action" aria-hidden="true"></span><span class="run-dust" aria-hidden="true"></span><span class="speed-lines" aria-hidden="true"></span><span class="punch-trail" aria-hidden="true"></span><span class="stun-stars" aria-hidden="true"></span><svg class="hit-eyes" aria-hidden="true" viewBox="0 0 32 12" shape-rendering="crispEdges"><path fill="#29253d" d="M0 0h4v4h4v4h4v4H8V8H4V4H0zM8 0h4v4H8zM0 8h4v4H0zM18 0h4v4h4v4h4v4h-4V8h-4V4h-4zM26 0h4v4h-4zM18 8h4v4h-4z"/></svg><span class="impact-burst"></span><span class="damage-number"></span><span class="skill-burst"></span></div>
-          <div class="ground-shadow"></div><div class="position-tag">前排 · 战士</div>
+          <div class="ground-shadow"></div>
         </div>
         <div class="arena-ground"></div>
       </section>
@@ -87,7 +104,7 @@
 
       <section class="battle-tools">
         <div class="log-panel">
-          <div class="section-heading"><div><span class="heading-icon">▤</span><h2>战斗记录</h2></div><span id="log-count" class="log-count">等待开战</span></div>
+          <div class="section-heading"><div><span class="heading-icon">▤</span><h2>战斗记录</h2></div><div class="log-heading-actions"><span id="log-count" class="log-count">等待开战</span><button id="battle-log-toggle" class="log-toggle" type="button" aria-expanded="false" aria-controls="battle-log">暂停并查看</button></div></div>
           <ol id="battle-log" class="battle-log" aria-live="polite" aria-relevant="additions"></ol>
         </div>
         <div class="controls" aria-label="战斗操作">
@@ -98,14 +115,14 @@
       </section>
       </section>
 
-      <section id="route-screen" class="flow-screen route-screen" aria-label="路线选择" hidden>
-        <header class="flow-header"><div><p class="eyebrow">ACT 01 · ROUTE</p><h1>选择前进路线</h1></div><span id="route-progress" class="progress-chip">第 1 步 / 10</span></header>
-        <p class="flow-copy">前方有两条路，选一条继续探索。</p>
+      <section id="route-screen" class="flow-screen route-screen" aria-label="第一大关路线选择" hidden>
+        <header class="flow-header"><div><p class="eyebrow">ACT 01 · EXPEDITION</p><h1>继续前进</h1></div><div class="route-header-actions"><span id="route-progress" class="progress-chip">第 1 步 / 15</span><button id="route-map-open" class="control-btn map-open-btn" type="button">查看地图</button></div></header>
+        <p class="flow-copy">选择一块路牌，踏上下一段旅程。</p>
         <div class="route-landscape">
-          <div class="route-hill hill-left"></div><div class="route-hill hill-right"></div>
-          <div class="route-player"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span><small id="route-player-hp">HP 1200 / 1200</small></div>
-          <div id="route-signs" class="route-signs"></div>
-          <div class="route-ground"></div>
+          <span class="route-hill hill-left"></span><span class="route-hill hill-right"></span>
+          <button class="route-player" type="button" data-character-detail="naruto" aria-haspopup="dialog" aria-label="查看鸣人的属性和技能"><img id="route-player-img" src="assets/naruto-v2/frames/idle.svg" alt=""><span id="route-player-name">鸣人</span></button>
+          <div id="route-signs" class="route-signs" aria-label="选择下一地点"></div>
+          <div class="route-ground" aria-hidden="true"></div>
         </div>
         <div class="route-footer"><span>当前生命</span><b id="route-health">1200 / 1200</b></div>
       </section>
@@ -124,9 +141,29 @@
         <button id="restart-run-btn" class="control-btn primary intro-start" type="button"><span class="button-icon">↻</span><span>重新开始游戏</span></button>
       </section>
       <aside id="boss-distance" class="boss-distance" aria-label="Boss距离" hidden>
-        <div id="boss-distance-party" class="boss-distance-party"></div><div class="boss-distance-track"><i id="boss-distance-fill"></i></div><span class="boss-distance-icon" aria-label="Boss">☠</span>
+        <div class="boss-distance-track" aria-label="前往 Boss 的路线进度"><i id="boss-distance-fill"></i><img id="boss-distance-player" class="distance-portrait" alt=""></div><img class="boss-distance-icon" src="assets/route-signs/demon.png" alt="Boss 路牌">
       </aside>
     </main>
+<dialog id="route-map-dialog" class="route-map-dialog" aria-labelledby="route-map-title">
+  <div class="route-map-dialog-inner">
+    <header class="route-map-dialog-header"><div><span class="detail-eyebrow">ACT 01 · ROUTE MAP</span><h2 id="route-map-title">探索地图</h2></div><button id="route-map-close" class="detail-close" type="button" aria-label="关闭地图">×</button></header>
+    <p class="route-map-readonly-note">完整路线已生成。点击高亮的下一节点开始探索；事件内容进入后揭晓。</p>
+    <div id="route-map-scroll" class="route-map-scroll" tabindex="0" aria-label="可纵向滚动选择和查看路线地图">
+      <div id="route-map-world" class="route-map-world">
+        <svg id="route-map-edges" class="route-map-edges" viewBox="0 0 1000 1600" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div id="route-map-nodes" class="route-map-nodes"></div>
+      </div>
+    </div>
+    <div class="route-map-legend" aria-label="地图图例">
+      <strong>图例</strong>
+      <span><img src="assets/route-signs/map-battle.svg" alt="">普通战斗</span>
+      <span><img src="assets/route-signs/map-elite.svg" alt="">精英战</span>
+      <span><img src="assets/route-signs/map-question.svg" alt="">未知事件</span>
+      <span><img src="assets/route-signs/map-campfire.svg" alt="">篝火</span>
+      <span><img src="assets/route-signs/demon.png" alt="">Boss</span>
+    </div>
+  </div>
+</dialog>
 <dialog id="character-dialog" class="character-dialog" aria-labelledby="character-dialog-title">
       <div class="character-dialog-inner">
         <header class="character-dialog-header">
