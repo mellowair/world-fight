@@ -1,0 +1,42 @@
+{
+  "character": "naruto-v2",
+  "canvas": {
+    "width": 96,
+    "height": 112,
+    "format": "RGBA PNG"
+  },
+  "skills": {
+    "skill1_shadow_clone": {
+      "displayName": "影分身之术",
+      "frames": [
+        "skill1_1.png",
+        "skill1_2.png",
+        "skill1_3.png",
+        "skill1_4.png"
+      ],
+      "durationsMs": [
+        180,
+        180,
+        220,
+        260
+      ],
+      "loop": false
+    },
+    "skill2_rasengan": {
+      "displayName": "螺旋丸",
+      "frames": [
+        "skill2_1.png",
+        "skill2_2.png",
+        "skill2_3.png",
+        "skill2_4.png"
+      ],
+      "durationsMs": [
+        160,
+        180,
+        200,
+        260
+      ],
+      "loop": false
+    }
+  }
+}
