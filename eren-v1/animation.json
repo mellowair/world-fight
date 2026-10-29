@@ -1,0 +1,108 @@
+{
+  "character": "Eren Yeager",
+  "sourceDirectory": "D:/H5自动战斗原型/reference/艾伦",
+  "frameSize": {
+    "width": 96,
+    "height": 112
+  },
+  "background": "transparent RGBA",
+  "actions": {
+    "idle": {
+      "source": "艾伦.png",
+      "frame": "idle.png"
+    },
+    "fall": {
+      "frames": [
+        {
+          "source": "降落2.png",
+          "frame": "fall_2.png",
+          "role": "drop_start",
+          "durationMs": 2000
+        },
+        {
+          "source": "降落1.png",
+          "frame": "fall_1.png",
+          "role": "impact",
+          "durationMs": 680
+        },
+        {
+          "source": "降落2.png",
+          "frame": "fall_2.png",
+          "role": "rebound",
+          "durationMs": 300
+        }
+      ]
+    },
+    "run": [
+      {
+        "source": "run_1.svg",
+        "frame": "run_a.png"
+      },
+      {
+        "source": "run_2.svg",
+        "frame": "run_b.png"
+      }
+    ],
+    "meleeAttack": {
+      "frames": [
+        {
+          "source": "挥拳起手.png",
+          "frame": "attack_windup.png",
+          "key": "windup",
+          "durationMs": 90
+        },
+        {
+          "source": "punch.png",
+          "frame": "punch.png",
+          "key": "strike",
+          "durationMs": 140
+        },
+        {
+          "source": "挥拳收手.png",
+          "frame": "attack_recover.png",
+          "key": "recover",
+          "durationMs": 90
+        }
+      ],
+      "sequence": [
+        "windup",
+        "strike",
+        "recover"
+      ]
+    },
+    "hit": {
+      "source": "受到攻击.png",
+      "frame": "hit.png"
+    },
+    "dodge": {
+      "source": "闪避.png",
+      "frame": "dodge.png"
+    },
+    "death": {
+      "source": "death.svg",
+      "embeddedImageExtracted": true,
+      "frame": "death.png"
+    }
+  },
+  "skills": {
+    "eren-free-will": {
+      "action": "skill1",
+      "frames": [
+        { "source": "技能1_1.png", "frame": "skill1_1.png", "role": "windup_in_place", "durationMs": 420 },
+        { "source": "技能1_2.png", "frame": "skill1_2.png", "role": "at_target", "durationMs": 240 },
+        { "source": "技能1_3.png", "frame": "skill1_3.png", "role": "at_target", "durationMs": 300 }
+      ],
+      "sequence": ["skill1_1", "run_a/run_b_to_target", "skill1_2", "skill1_3", "run_a/run_b_return"]
+    },
+    "eren-tatakae": {
+      "action": "skill2",
+      "frames": [
+        { "source": "技能2_1.png", "frame": "skill2_1.png", "role": "windup_in_place", "durationMs": 420 },
+        { "source": "技能2-2.png", "frame": "skill2_2.png", "role": "at_target", "durationMs": 400 }
+      ],
+      "sequence": ["skill2_1", "run_a/run_b_to_target", "skill2_2", "run_a/run_b_return"]
+    }
+  },
+  "processing": "Checkerboard backgrounds on supplied PNGs removed by border-connected neutral-pixel flood fill; all frames are normalized to 96x112 RGBA with nearest-neighbor scaling and a shared foot baseline.",
+  "skillAnimationPlayback": "Skill events remain precomputed once; the app replays authored frames and returns the actor to the battle state before advancing the event queue."
+}

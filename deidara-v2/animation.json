@@ -1,0 +1,18 @@
+{
+  "character": "Deidara",
+  "source": "reference/迪达拉.png and generated sprite sheet deidara-v2/reference/deidara-sheet-v1.png",
+  "canvas": { "width": 96, "height": 112, "format": "PNG", "mode": "RGBA", "background": "transparent" },
+  "skill1": {
+    "displayName": "C4 迦楼罗",
+    "skillId": "c4-garuda",
+    "chance": 1,
+    "frames": ["skill1/skill1_1.png", "skill1/skill1_2.png", "skill1/skill1_3.png", "skill1/skill1_4.png"]
+  },
+  "hit": ["hit/hit_1.png"],
+  "death": ["death/death_1.png"],
+  "skill2": {
+    "displayName": "C0 终极艺术",
+    "frames": ["skill2/skill2_1.png", "skill2/skill2_2.png", "skill2/skill2_3.png", "skill2/skill2_4.png"]
+  },
+  "idle": ["idle/idle_1.png"]
+}
