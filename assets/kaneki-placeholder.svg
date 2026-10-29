@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="112" viewBox="0 0 96 112" shape-rendering="crispEdges" aria-label="金木研临时占位造型">
+  <path fill="#141824" d="M30 12h36v6h12v12h6v18h-6v7h-7v9h8v19h-8v21H25V83h-8V64h8v-9h-7V30h6V18h6z"/>
+  <path fill="#e8e4dc" d="M31 18h30v6H31zm-7 12h48v6H24zm0 12h48v6H24zm8 6h32v13H32z"/>
+  <path fill="#c4bcae" d="M31 54h32v9H31z"/>
+  <path fill="#212432" d="M25 66h46v26H25zm-4 26h20v12H21zm34 0h20v12H55z"/>
+  <path fill="#991f38" d="M53 48h8v8h-8z"/>
+  <path fill="#f0e8dc" d="M35 48h8v5h-8z"/>
+  <path fill="#78606d" d="M42 68h10v24H42z"/>
+  <path fill="#e7e0d5" d="M26 97h13v7H26zm31 0h13v7H57z"/>
+</svg>
